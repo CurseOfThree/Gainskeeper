@@ -26,6 +26,8 @@ Everything is stored on the phone (browser storage inside the app). Use Plan > S
 ## Importing programs
 Plan > Add program reads Excel, CSV, JSON, text and PDF files on the phone (libraries are bundled under www/lib, copied from node_modules by the build). With a Claude API key saved in Plan > Settings, "Ask Claude to read it" sends a PDF, photo or messy text to Anthropic and gets CSV back. The key stays on the phone and is not in backups.
 
+Photos and scanned PDFs are read on the phone with Google ML Kit (@capacitor-mlkit/text-recognition), Android app only. The OCR text is rows rebuilt from line positions, so layouts with columns come out as spaced text.
+
 ## Not carried over from the Artifact version
 Cloud saving and "Ask Claude to read it" depended on running inside Claude. Add programs by pasting CSV, JSON or the short text format, or ask Claude in chat to convert a sheet and paste the result.
 

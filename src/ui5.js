@@ -73,7 +73,11 @@ async function pdfText(f){
   for(let n=1;n<=doc.numPages;n++){ const pg=await doc.getPage(n); const tc=await pg.getTextContent(); const rows=new Map();
     tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; const y=Math.round(it.transform[5]/3); const r=rows.get(y)||[]; r.push({x:it.transform[4],s:it.str}); rows.set(y,r); });
     [...rows.keys()].sort((p,q)=>q-p).forEach(y=>out.push(rows.get(y).sort((p,q)=>p.x-q.x).map(i=>i.s).join('  ').trim())); out.push(''); }
-  return {text:out.join('\n').trim(),pages:doc.numPages};
+  let text=out.join('\n').trim();
+  if(text.length<20&&window.GK_OCR&&GK_OCR.available()){ const parts=[]; const n=Math.min(doc.numPages,30);
+    for(let i=1;i<=n;i++){ S.ui.imp.note='Reading scanned page '+i+' of '+n+'...'; render(); const pg=await doc.getPage(i); const vp=pg.getViewport({scale:2}); const cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height; await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise; const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.92)); parts.push(await GK_OCR.image(blob)); }
+    text=parts.join('\n\n').trim(); }
+  return {text,pages:doc.numPages,ocr:text.length>=20&&out.join('').trim().length<20};
 }
 async function sheetsFrom(f){
   await loadLib('xlsx'); const wb=window.XLSX.read(await f.arrayBuffer(),{type:'array'}); const im=S.ui.imp; im.wb=wb; im.sheets=wb.SheetNames.slice(); im.sheet=0; sheetToText();
@@ -199,12 +203,17 @@ const IN={
   impname:el=>{ if(S.ui.imp.res) S.ui.imp.res.name=el.value; },
   impfile:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; const im=S.ui.imp; im.err=''; im.note=''; im.fileName=f.name; im.pdf=null; im.sheets=null; im.wb=null; el.value='';
     try{
-      if(/^image\//.test(f.type)){ if(apiKey()){ im.images.push(f); im.note='Photo added'; } else im.err='Photos need a Claude key. Add one in Plan, Settings.'; }
-      else if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)){ im.pdf=f; let txt={text:'',pages:0}; try{ txt=await pdfText(f); }catch(e){} im.text=txt.text; im.note=f.name+(txt.pages?', '+txt.pages+' pages':''); if(!txt.text) im.err=apiKey()?'No text found in that PDF. Use Ask Claude to read it.':'No text found in that PDF, it may be scanned. Add a Claude key in Settings to read it.'; }
+      if(/^image\//.test(f.type)){
+        if(apiKey()) im.images.push(f);
+        if(window.GK_OCR&&GK_OCR.available()){ im.note='Reading text from photo...'; render(); const t=await GK_OCR.image(f); im.text=(im.text&&im.text.trim()?im.text.trim()+'\n\n':'')+t; im.note='Photo read on this phone'+(apiKey()?' (also attached for Claude)':''); if(!t.trim()) im.err='No text found in that photo.'; }
+        else if(apiKey()) im.note='Photo added for Claude';
+        else im.err='Reading photos needs the Android app, or a Claude key in Plan, Settings.';
+      }
+      else if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)){ im.pdf=f; let txt={text:'',pages:0}; try{ txt=await pdfText(f); }catch(e){} im.text=txt.text; im.note=f.name+(txt.pages?', '+txt.pages+' pages':'')+(txt.ocr?', read as a scan':''); if(!txt.text) im.err=apiKey()?'No text found in that PDF. Use Ask Claude to read it.':'No text found in that PDF, it may be scanned. Add a Claude key in Settings to read it.'; }
       else if(/\.(xlsx|xls)$/i.test(f.name)) await sheetsFrom(f);
       else im.text=await readFileText(f);
     }catch(e){ im.err='Could not read that file.'; }
-    if(im.text&&im.text.trim()&&!/^image\//.test(f.type)){ const r=L.parseAny(im.text); const n=r.prog?r.prog.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.ex.length,0),0):0; if(r.prog&&n>0){ im.res=r; im.res.name=r.prog.name; im.err=''; } else { im.res=null; im.err=(im.err?im.err+' ':'')+'I could not recognise a program layout in that text. '+(apiKey()?'Tap Ask Claude to read it, or edit the text and tap Read it.':'You can edit the text and tap Read it, or add a Claude key in Plan, Settings so Ask Claude can read messy files.'); } }
+    if(im.text&&im.text.trim()){ const r=L.parseAny(im.text); const n=r.prog?r.prog.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.ex.length,0),0):0; if(r.prog&&n>0){ im.res=r; im.res.name=r.prog.name; im.err=''; } else { im.res=null; im.err=(im.err?im.err+' ':'')+'I could not recognise a program layout in that text. '+(apiKey()?'Tap Ask Claude to read it, or edit the text and tap Read it.':'You can edit the text and tap Read it, or add a Claude key in Plan, Settings so Ask Claude can read messy files.'); } }
     render(); },
   restore:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; try{ const d=JSON.parse(await readFileText(f)); let a=0,b=0;
       (d.programs||[]).forEach(p=>{ if(p&&p.id&&!S.programs.some(x=>x.id===p.id)){ saveProgram(p); a++; } });
