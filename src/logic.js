@@ -302,9 +302,9 @@ function checkin(ws,goal,rate,now){
   }
   return {ok:true,pct,a:a.avg,b:b.avg,msg,adj};
 }
-function recLevel(r){ if(!r||(!r.s&&!r.f)) return null; if((r.s&&r.s<=5)||(r.f&&r.f<=2)) return 'low'; if(r.s>=8&&r.f>=4) return 'good'; return 'ok'; }
-function recStats(rec,now,days){ let low=0,seen=0,ss=0,sn=0,fs=0,fn=0; for(let i=0;i<days;i++){ const r=rec[ymd(addDays(now,-i))]; if(!r) continue; seen++; if(recLevel(r)==='low') low++; if(r.s){ ss+=r.s; sn++; } if(r.f){ fs+=r.f; fn++; } } return {low,seen,sleep:sn?ss/sn:null,feel:fn?fs/fn:null}; }
-function trend(rec,now,target,sessions){
+function recLevel(r){ if(!r||(!r.s&&!r.f&&!r.o&&!r.t)) return null; if((r.s&&r.s<=5)||(r.f&&r.f<=2)||(r.o&&r.o>=4)||(r.t&&r.t<=2)) return 'low'; if(r.s>=8&&r.f>=4&&!(r.o&&r.o>=3)&&!(r.t&&r.t<=3)) return 'good'; return 'ok'; }
+function recStats(rec,now,days){ let low=0,seen=0; const sum={s:0,f:0,m:0,o:0,t:0},n={s:0,f:0,m:0,o:0,t:0}; for(let i=0;i<days;i++){ const r=rec[ymd(addDays(now,-i))]; if(!r) continue; if(recLevel(r)||r.m) seen++; if(recLevel(r)==='low') low++; for(const k in sum) if(r[k]){ sum[k]+=r[k]; n[k]++; } } const av=k=>n[k]?sum[k]/n[k]:null; return {low,seen,sleep:av('s'),feel:av('f'),mood:av('m'),sore:av('o'),str:av('t')}; }
+function trend(rec,now,target,sessions,goal){
   const lv=[]; for(let i=0;i<14;i++){ const r=rec[ymd(addDays(now,-i))]; lv.push(r?recLevel(r):null); }
   let i=lv[0]===null?1:0; let low=0; while(i<14&&lv[i]==='low'){ low++; i++; }
   i=lv[0]===null?1:0; let good=0; while(i<14&&lv[i]==='good'){ good++; i++; }
@@ -317,6 +317,17 @@ function trend(rec,now,target,sessions){
   else if(low>=3) out.push({k:'warn',t:'Low for '+low+' days running. Keep the weights where they feel safe, drop a set or two per exercise, and sort sleep before adding anything.'+(recentSess>=target?' You have also trained '+recentSess+' times in the last 7 days, so a rest day is a fair call.':'')});
   else if(low===2) out.push({k:'info',t:'Two low days in a row. Nothing to change yet. If tomorrow is also flat, ease the volume.'});
   if(sleep!==null&&sleep<=5.5) out.push({k:'warn',t:'Sleep has averaged about '+(Math.round(sleep*10)/10)+' hours over your last '+sl.length+' check-ins. Sleep loss tends to hit heavy lifts and recovery first, so it is the cheapest lever to pull.'});
+  const ser=k=>{ const a=[]; for(let j=0;j<14;j++){ const r=rec[ymd(addDays(now,-j))]; if(r&&r[k]) a.push(r[k]); } return a; };
+  const runOf=(a,fn)=>{ let n=0; while(n<a.length&&fn(a[n])) n++; return n; };
+  const mood=ser('m'), sore=ser('o'), str=ser('t');
+  const mlow=runOf(mood,v=>v<=2);
+  if(mlow>=3) out.push({k:'warn',t:'Mood has been low for '+mlow+' check-ins in a row. Training tends to help mood, so keep sessions short and easy rather than skipping them. If it lasts a couple of weeks or feels heavy, talk to your GP or someone you trust.'});
+  const sr=runOf(sore,v=>v>=4);
+  if(sr>=3) out.push({k:'warn',t:'Sore at 4 or 5 for '+sr+' check-ins running. That is more than you are recovering from right now. Trim sets on the sore muscles by about a third, or train something else, until it drops to 3 or below.'});
+  else if(sore.length>=1&&sore[0]>=4) out.push({k:'info',t:'Very sore today. Warm up longer than usual and let soreness, not the clock, set the pace. Light movement usually eases it.'});
+  const sweak=str.slice(0,5).filter(v=>v<=2).length;
+  if(str.length>=3&&sweak>=3) out.push({k:'warn',t:'The weights have felt heavy on '+sweak+' of your last '+Math.min(5,str.length)+' check-ins. Common causes are short sleep, too little food'+(goal==='cut'?' (you are in a deficit, so check you are not cutting too hard)':'')+' and stress. Hold the loads rather than pushing for PRs until it lifts.'});
+  const sstrong=runOf(str,v=>v>=4);
   if(good>=4&&low===0) out.push({k:'good',t:'Fresh for '+good+' days running. Good window to push top sets or add a rep.'});
   return {out,low,good,seen,lows,sleep};
 }

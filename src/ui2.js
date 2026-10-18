@@ -68,16 +68,19 @@ function randomiserView(){
 }
 /* ---------- recovery + cardio ---------- */
 const FEEL=['Flat','Low','OK','Good','Great'];
+const MOOD=['Low','Flat','OK','Good','Great'], SORE=['None','Mild','Some','Sore','Very sore'], STR=['Weak','Down','Normal','Good','Strong'];
+const recRow=(lbl,k,names,r)=>'<span class="lbl" style="margin-top:10px">'+lbl+'</span><div class="chips">'+names.map((w,i)=>'<button class="chip" data-act="recset" data-k="'+k+'" data-v="'+(i+1)+'" aria-pressed="'+(r[k]===i+1)+'">'+w+'</button>').join('')+'</div>';
 function recoveryCard(){
   const t=today(); const r=(S.profile.rec||{})[t]||{}; const lvl=L.recLevel(r); 
   let h='<div class="card"><div class="row between"><h3>How are you today?</h3>'+(lvl?'<span class="tag '+(lvl==='low'?'r':lvl==='good'?'g':'')+'">'+(lvl==='low'?'Take it easier':lvl==='good'?'Good to go':'Normal day')+'</span>':'')+'</div>';
   h+='<span class="lbl" style="margin-top:8px">Sleep last night (hours)</span><div class="chips">'+[5,6,7,8,9].map(n=>'<button class="chip" data-act="recset" data-k="s" data-v="'+n+'" aria-pressed="'+(r.s===n)+'">'+(n===5?'5 or less':n===9?'9 or more':n)+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:10px">How fresh do you feel</span><div class="chips">'+FEEL.map((w,i)=>'<button class="chip" data-act="recset" data-k="f" data-v="'+(i+1)+'" aria-pressed="'+(r.f===i+1)+'">'+w+'</button>').join('')+'</div>';
+  h+=recRow('Mood','m',MOOD,r)+recRow('Muscle soreness','o',SORE,r)+recRow('How strong do you feel','t',STR,r);
   if(lvl==='low') h+='<p class="small" style="margin-top:10px">Short on sleep or feeling flat. In the sleep research, heavy multi-joint lifts took the hit most. You can still train: keep weights where they feel safe and trim a set or two if form slips.</p>';
   else if(lvl==='good') h+='<p class="small" style="margin-top:10px">Rested and fresh. A good day to push your top sets.</p>';
   else if(lvl) h+='<p class="small" style="margin-top:10px">Fine to train as planned.</p>';
-  L.trend(S.profile.rec||{},new Date(),S.profile.target,S.sessions).out.forEach(x=>{ h+='<div class="notice" style="margin-top:10px">'+esc(x.t)+'</div>'; });
-  return h+'<p class="tiny muted" style="margin-top:8px">Takes ten seconds. The advice rules are my own, based on the sleep and deload studies in the Library.</p></div>';
+  L.trend(S.profile.rec||{},new Date(),S.profile.target,S.sessions,S.profile.fuel.goal).out.slice(0,2).forEach(x=>{ h+='<div class="notice" style="margin-top:10px">'+esc(x.t)+'</div>'; });
+  return h+'<p class="tiny muted" style="margin-top:8px">All optional, about ten seconds. The advice rules are my own, informed by the sleep and deload studies in the Library.</p></div>';
 }
 function cardioCard(){
   const cd=S.ui.cd; const wk=L.cardioWeeks(S.profile.cardio,new Date(),1)[0].count; const list=[...(S.profile.cardio||[])].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0).slice(0,5);
