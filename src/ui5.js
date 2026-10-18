@@ -64,13 +64,41 @@ function addExercise(){
   const e=fromPlanItem(it,hist); e.target.repsText='8 to 12'; if(!e.sug&&h) e.sets.forEach(s=>{ s.kg=h.topKg; });
   S.active.ex.push(e); S.ui.addEx=''; saveActive(); render();
 }
+const CLAUDE_MODEL='claude-sonnet-5-5';
+function loadLib(name){ return new Promise((res,rej)=>{ const id='lib-'+name; if(document.getElementById(id)) return res(); const sc=document.createElement('script'); sc.id=id; sc.src='lib/'+name+'.js'; sc.onload=()=>res(); sc.onerror=()=>{ sc.remove(); rej(new Error('Could not load '+name)); }; document.head.appendChild(sc); }); }
+function fileB64(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=()=>rej(r.error); r.readAsDataURL(f); }); }
+async function pdfText(f){
+  await loadLib('pdf'); const pdfjs=window.pdfjsLib; pdfjs.GlobalWorkerOptions.workerSrc='lib/pdf.worker.js';
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise; const out=[];
+  for(let n=1;n<=doc.numPages;n++){ const pg=await doc.getPage(n); const tc=await pg.getTextContent(); const rows=new Map();
+    tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; const y=Math.round(it.transform[5]/3); const r=rows.get(y)||[]; r.push({x:it.transform[4],s:it.str}); rows.set(y,r); });
+    [...rows.keys()].sort((p,q)=>q-p).forEach(y=>out.push(rows.get(y).sort((p,q)=>p.x-q.x).map(i=>i.s).join('  ').trim())); out.push(''); }
+  return {text:out.join('\n').trim(),pages:doc.numPages};
+}
+async function sheetsFrom(f){
+  await loadLib('xlsx'); const wb=window.XLSX.read(await f.arrayBuffer(),{type:'array'}); const im=S.ui.imp; im.wb=wb; im.sheets=wb.SheetNames.slice(); im.sheet=0; sheetToText();
+}
+function sheetToText(){ const im=S.ui.imp; const ws=im.wb.Sheets[im.sheets[im.sheet]]; im.text=window.XLSX.utils.sheet_to_csv(ws,{blankrows:false}); im.note=(im.fileName||'Spreadsheet')+', sheet "'+im.sheets[im.sheet]+'"'; }
 async function impClaude(){
-  const im=S.ui.imp; const sample=S.cap.sample; if(!sample) return;
-  if(!im.text.trim()&&!im.images.length){ im.err='Paste some text or attach a photo first.'; render(); return; }
+  const im=S.ui.imp; const key=apiKey(); if(!key){ im.err='Add your Claude key in Plan, Settings first.'; render(); return; }
+  if(!im.text.trim()&&!im.images.length&&!im.pdf){ im.err='Paste some text or attach a file or photo first.'; render(); return; }
   im.busy=true; im.err=''; im.res=null; render();
-  const prompt='You turn gym training programs into JSON. Return ONLY JSON with this shape: {"name":string,"weeks":[{"days":[{"name":string,"exercises":[{"name":string,"sets":number,"reps":string,"load":string,"rpe":string,"note":string}]}]}]}. Rules: list every week separately even if weeks repeat. Keep loads exactly as written (for example "80kg" or "RPE8"), use "" if there is none. Start the name with "A)" or "B)" for superset pairs. Do not invent exercises or numbers that are not in the source.';
-  try{ const opts={}; if(im.images.length&&S.cap.images) opts.images=im.images; const res=await sample.json(prompt+(im.text.trim()?'\n\nProgram:\n'+im.text:''),opts); const prog=L.normProgram(res); im.res={prog,warn:prog.weeks.length?['Read by Claude. Check the numbers against your sheet before saving.']:['Claude did not find any weeks in that.'],name:prog.name}; }
-  catch(e){ const c=e&&e.code; im.err=c==='not_granted'?'Permission was not given.':c==='rate_limited'?'Too many requests. Try again in a minute.':'Claude could not read that ('+(c||'error')+'). Try pasting plain text instead.'; }
+  const prompt='You turn gym training programs into CSV. Reply with ONLY CSV, no commentary and no code fences. First line: NAME,<program name>. Second line is the header: week,day,exercise,sets,reps,load,rpe,note. One row per exercise per day per week. List every week separately even when weeks repeat, numbering weeks from 1. Put the day name in the day column (for example Lower, Upper, Pull). Reps may be a number or a range such as 8-10, or a time such as 60s. Keep loads exactly as written, including units (kg, lb), percentages and RPE text, and leave load empty if there is none. Put technique or intensity tags (such as EL, ES, tempo) and any coaching text into note. Start the exercise name with "A)" or "B)" for superset pairs. Quote any field that contains a comma. Do not invent exercises or numbers that are not in the source.';
+  try{
+    const content=[];
+    if(im.pdf){ if(im.pdf.size>20*1024*1024) throw new Error('That PDF is over 20 MB.'); content.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:await fileB64(im.pdf)}}); }
+    for(const f of im.images){ content.push({type:'image',source:{type:'base64',media_type:/^image\/(png|jpeg|gif|webp)$/.test(f.type)?f.type:'image/jpeg',data:await fileB64(f)}}); }
+    content.push({type:'text',text:prompt+((!im.pdf&&im.text.trim())?'\n\nProgram:\n'+im.text:'')});
+    const ac=new AbortController(); const to=setTimeout(()=>ac.abort(),300000);
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:ac.signal,headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:CLAUDE_MODEL,max_tokens:16000,messages:[{role:'user',content}]})});
+    clearTimeout(to); const j=await r.json().catch(()=>({}));
+    if(!r.ok){ const m=(j.error&&j.error.message)||''; throw new Error(r.status===401?'The key was rejected. Check it in Settings.':r.status===429?'Too many requests or out of credit. Try again shortly.':r.status===413?'The file is too large to send.':('Claude returned an error ('+r.status+'). '+m)); }
+    let t=((j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('')||'').trim().replace(/^```[a-z]*\n?/i,'').replace(/```\s*$/,'').trim();
+    let name='';
+    const nm=t.match(/^NAME,(.*)\n/i); if(nm){ name=nm[1].replace(/^"|"$/g,'').trim(); t=t.slice(nm[0].length); }
+    const res=L.parseAny(t); const warn=(res.warn||[]).slice(); if(res.prog){ warn.unshift('Read by Claude. Check the numbers against your sheet before saving.'); if(name) res.prog.name=name; }
+    im.res={prog:res.prog,warn,name:name||(res.prog&&res.prog.name)||''}; if(j.stop_reason==='max_tokens') im.res.warn.push('The reply was cut off, so later weeks may be missing. Try a shorter section of the program.');
+  }catch(e){ im.err=(e&&e.name==='AbortError')?'That took too long. Try a smaller file or fewer weeks.':('Could not read that: '+((e&&e.message)||'error')); }
   im.busy=false; render();
 }
 async function doDownload(name,data){
@@ -130,6 +158,8 @@ const H={
   useprog:el=>{ S.profile.activePid=el.dataset.id; S.profile.ptr={w:0,d:0,done:false}; S.ui.bw=0; S.ui.bd=0; saveProfile(); toast('Program is now active.'); render(); },
   impread:()=>{ const im=S.ui.imp; im.err=''; im.res=L.parseAny(im.text); if(im.res.prog) im.res.name=im.res.prog.name; render(); },
   impclaude:()=>impClaude(),
+  impsheet:el=>{ const im=S.ui.imp; im.sheet=+el.dataset.v; sheetToText(); render(); },
+  clearkey:()=>{ try{ localStorage.removeItem(LS_KEY_API); }catch(e){} toast('Key removed.'); render(); },
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
     if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:0,d:0,done:false}; saveProfile(); }
     S.ui.imp={text:'',res:null,busy:false,err:'',images:[]}; S.ui.planTab='program'; S.ui.bpid=p.id; S.ui.bw=0; S.ui.bd=0; toast('Program saved.'); render(); },
@@ -157,6 +187,7 @@ const H={
 document.addEventListener('click',ev=>{ const el=ev.target.closest('[data-act]'); if(!el) return; if(el.tagName==='A') ev.preventDefault(); const f=H[el.dataset.act]; if(f) f(el,ev); });
 function readFileText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result)); r.onerror=()=>rej(r.error); r.readAsText(file); }); }
 const IN={
+  apikey:(el,ph)=>{ if(ph!=='change') return; const v=el.value.trim(); if(!v) return; try{ localStorage.setItem(LS_KEY_API,v); toast('Key saved on this phone.'); }catch(e){ toast('Could not save the key.'); } render(); },
   setname:(el)=>{ S.profile.name=el.value.trim().slice(0,30); saveProfile(); },
   addex:(el)=>{ S.ui.addEx=el.value; },
   wdate:(el,ph)=>{ if(ph!=='change'||!S.active) return; let v=el.value; if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) return; if(v>today()) v=today(); S.active.date=v; S.active.past=!!S.active.editing||v!==today(); if(S.active.past) S.rest=null; saveActive(); render(); },
@@ -166,10 +197,13 @@ const IN={
   wnotes:el=>{ S.active.notes=el.value; saveActiveSoon(); },
   imptext:el=>{ S.ui.imp.text=el.value; },
   impname:el=>{ if(S.ui.imp.res) S.ui.imp.res.name=el.value; },
-  impfile:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; const im=S.ui.imp; im.err='';
-    if(/^image\//.test(f.type)){ if(S.cap.images){ im.images.push(f); } else im.err='Photos can only be read when this page runs inside Claude.'; }
-    else if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)) im.err='PDFs cannot be opened here. Paste the text, or send the PDF to me in chat.';
-    else { try{ im.text=await readFileText(f); }catch(e){ im.err='Could not read that file.'; } }
+  impfile:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; const im=S.ui.imp; im.err=''; im.note=''; im.fileName=f.name; im.pdf=null; im.sheets=null; im.wb=null; el.value='';
+    try{
+      if(/^image\//.test(f.type)){ if(apiKey()){ im.images.push(f); im.note='Photo added'; } else im.err='Photos need a Claude key. Add one in Plan, Settings.'; }
+      else if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)){ im.pdf=f; let txt={text:'',pages:0}; try{ txt=await pdfText(f); }catch(e){} im.text=txt.text; im.note=f.name+(txt.pages?', '+txt.pages+' pages':''); if(!txt.text) im.err=apiKey()?'No text found in that PDF. Use Ask Claude to read it.':'No text found in that PDF, it may be scanned. Add a Claude key in Settings to read it.'; }
+      else if(/\.(xlsx|xls)$/i.test(f.name)) await sheetsFrom(f);
+      else im.text=await readFileText(f);
+    }catch(e){ im.err='Could not read that file.'; }
     render(); },
   restore:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; try{ const d=JSON.parse(await readFileText(f)); let a=0,b=0;
       (d.programs||[]).forEach(p=>{ if(p&&p.id&&!S.programs.some(x=>x.id===p.id)){ saveProgram(p); a++; } });

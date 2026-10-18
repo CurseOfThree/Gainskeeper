@@ -11,4 +11,7 @@ const native=fs.readFileSync(path.join(__dirname,'native.js'),'utf8');
 const out=head+shell+markup+'<script>\n'+native+'\n'+js+'\n</script>\n</body></html>\n';
 fs.mkdirSync(path.join(__dirname,'..','www'),{recursive:true});
 fs.writeFileSync(path.join(__dirname,'..','www','index.html'),out);
+const lib=path.join(__dirname,'..','www','lib'); fs.mkdirSync(lib,{recursive:true});
+const nm=path.join(__dirname,'..','node_modules');
+[['xlsx/dist/xlsx.mini.min.js','xlsx.js'],['pdfjs-dist/build/pdf.min.js','pdf.js'],['pdfjs-dist/build/pdf.worker.min.js','pdf.worker.js']].forEach(([a,b])=>fs.copyFileSync(path.join(nm,a),path.join(lib,b)));
 console.log('www/index.html',out.length,'bytes');

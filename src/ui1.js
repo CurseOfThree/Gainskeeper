@@ -14,6 +14,8 @@ const S={tab:'train',profile:DEF_PROFILE(),programs:[],sessions:[],active:null,s
 const LS_KEY='ironlog.v1',LS_ACTIVE='ironlog.active',LS_UI='ironlog.ui',LS_COLL='gainskeeper.collapsed';
 function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
+const LS_KEY_API='gainskeeper.apikey';
+function apiKey(){ try{ return (localStorage.getItem(LS_KEY_API)||'').trim(); }catch(e){ return ''; } }
 function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
 /* ---------- storage ---------- */
 const Cloud={ref:null,on:false,q:{},pt:null};
