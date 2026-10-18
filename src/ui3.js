@@ -94,3 +94,17 @@ function measCard(){
   h+=[...ms].reverse().slice(0,5).map(x=>'<div class="li"><div class="grow"><b>'+fdate(x.d)+'</b><div class="hint num">'+MFIELDS.filter(f=>x[f[0]]>0).map(f=>f[1]+' '+x[f[0]]).join(' · ')+'</div></div><button class="btn sm ghost" data-act="msdel" data-id="'+esc(x.id)+'">Delete</button></div>').join('');
   return h+'</div>';
 }
+/* ---------- first-run setup ---------- */
+function viewSetup(){
+  const p=S.profile; const dn=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; const eqn=[['bb','Barbell'],['db','Dumbbells'],['mach','Machines'],['cable','Cables'],['kb','Kettlebells']];
+  let h='<div style="padding:12px 0 24px"><div class="brand" style="margin:8px 0 4px"><div><h1 style="margin:0">Gainskeeper</h1><small>Strength and shape, kept.</small></div></div><div class="knurl" style="margin:12px 0"></div>';
+  h+='<div class="card"><h2>Set up</h2><p class="small muted" style="margin:4px 0 10px">Everything stays on this phone. You can change any of this later in Plan, Settings.</p>';
+  h+='<label class="lbl" for="sname">What should I call you?</label><input id="sname" data-in="setname" type="text" autocomplete="off" maxlength="30" value="'+esc(p.name||'')+'" placeholder="Name">';
+  h+='<span class="lbl" style="margin-top:14px">Used for calorie and protein estimates</span><div class="chips">'+[['m','Male'],['f','Female']].map(x=>'<button class="chip" data-act="fsex" data-v="'+x[0]+'" aria-pressed="'+(p.fuel.sex===x[0])+'">'+x[1]+'</button>').join('')+'</div>';
+  h+='<span class="lbl" style="margin-top:14px">Sessions a week</span><div class="chips">'+[2,3,4,5,6].map(n=>'<button class="chip" data-act="settarget" data-v="'+n+'" aria-pressed="'+(p.target===n)+'">'+n+'</button>').join('')+'</div>';
+  h+='<span class="lbl" style="margin-top:14px">Planned days</span><div class="chips">'+dn.map((n,i)=>'<button class="chip" data-act="setday" data-v="'+i+'" aria-pressed="'+((p.days||[]).includes(i))+'">'+n+'</button>').join('')+'</div>';
+  h+='<span class="lbl" style="margin-top:14px">Equipment for random sessions</span><div class="chips">'+eqn.map(x=>'<button class="chip" data-act="seteq" data-v="'+x[0]+'" aria-pressed="'+(p.eq[x[0]]!==false)+'">'+x[1]+'</button>').join('')+'</div>';
+  h+='<p class="tiny muted" style="margin-top:12px">Already have a backup from another phone? Finish here, then restore it in Plan, Settings.</p>';
+  h+='<button class="btn pri" style="width:100%;margin-top:14px" data-act="setupdone">Start</button></div></div>';
+  return h;
+}

@@ -304,6 +304,22 @@ function checkin(ws,goal,rate,now){
 }
 function recLevel(r){ if(!r||(!r.s&&!r.f)) return null; if((r.s&&r.s<=5)||(r.f&&r.f<=2)) return 'low'; if(r.s>=8&&r.f>=4) return 'good'; return 'ok'; }
 function recStats(rec,now,days){ let low=0,seen=0,ss=0,sn=0,fs=0,fn=0; for(let i=0;i<days;i++){ const r=rec[ymd(addDays(now,-i))]; if(!r) continue; seen++; if(recLevel(r)==='low') low++; if(r.s){ ss+=r.s; sn++; } if(r.f){ fs+=r.f; fn++; } } return {low,seen,sleep:sn?ss/sn:null,feel:fn?fs/fn:null}; }
+function trend(rec,now,target,sessions){
+  const lv=[]; for(let i=0;i<14;i++){ const r=rec[ymd(addDays(now,-i))]; lv.push(r?recLevel(r):null); }
+  let i=lv[0]===null?1:0; let low=0; while(i<14&&lv[i]==='low'){ low++; i++; }
+  i=lv[0]===null?1:0; let good=0; while(i<14&&lv[i]==='good'){ good++; i++; }
+  const seen=lv.filter(x=>x).length, lows=lv.filter(x=>x==='low').length;
+  const sl=[]; for(let k=0;k<14&&sl.length<5;k++){ const r=rec[ymd(addDays(now,-k))]; if(r&&r.s) sl.push(r.s); }
+  const sleep=sl.length>=3?sl.reduce((a,b)=>a+b,0)/sl.length:null;
+  const wkAgo=ymd(addDays(now,-6)); const recentSess=(sessions||[]).filter(s=>s.date>=wkAgo).length;
+  const out=[];
+  if(low>=5||(seen>=8&&lows>=6)) out.push({k:'warn',t:'Flat for a good while now ('+(low>=5?low+' days running':lows+' of the last '+seen+' check-ins')+'). A lighter week is reasonable: about half the usual sets at the same weights, easy cardio, and early nights. If it is more than tiredness, such as low mood that sticks around, it is worth a chat with your GP.'});
+  else if(low>=3) out.push({k:'warn',t:'Low for '+low+' days running. Keep the weights where they feel safe, drop a set or two per exercise, and sort sleep before adding anything.'+(recentSess>=target?' You have also trained '+recentSess+' times in the last 7 days, so a rest day is a fair call.':'')});
+  else if(low===2) out.push({k:'info',t:'Two low days in a row. Nothing to change yet. If tomorrow is also flat, ease the volume.'});
+  if(sleep!==null&&sleep<=5.5) out.push({k:'warn',t:'Sleep has averaged about '+(Math.round(sleep*10)/10)+' hours over your last '+sl.length+' check-ins. Sleep loss tends to hit heavy lifts and recovery first, so it is the cheapest lever to pull.'});
+  if(good>=4&&low===0) out.push({k:'good',t:'Fresh for '+good+' days running. Good window to push top sets or add a rep.'});
+  return {out,low,good,seen,lows,sleep};
+}
 function cardioWeeks(c,now,n){ const mon=mondayOf(now); const out=[]; for(let i=n-1;i>=0;i--){ const s=addDays(mon,-7*i),e=addDays(s,7); const k0=ymd(s),k1=ymd(e); out.push({start:k0,count:Math.round((c||[]).filter(x=>x.date>=k0&&x.date<k1).reduce((a,x)=>a+x.min*(x.effort==='hard'?2:1),0))}); } return out; }
 /* ---- warm-up and stretching ---- */
 const TAGMAP={}; DB.forEach(e=>{ const k=keyOf(e.n); if(!TAGMAP[k]) TAGMAP[k]=e.t; });
@@ -349,6 +365,6 @@ function warmup(keys,len,rot){
 }
 function rampFor(kg){ kg=+kg; if(!(kg>=40)) return null; const out=[]; [[0.5,5],[0.7,3],[0.85,1]].forEach(([p,r])=>{ const k=Math.max(20,roundTo(kg*p,2.5)); if(!out.length||out[out.length-1].kg!==k) out.push({kg:k,reps:r}); }); return out; }
 function stretchesFor(keys){ const out=[]; groupsFor(keys).forEach(g=>(STR[g]||[]).forEach(s=>{ if(!out.includes(s)) out.push(s); })); return out.slice(0,6); }
-return {tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
+return {trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
 })();
 /* LOGIC:END */

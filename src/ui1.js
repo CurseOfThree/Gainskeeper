@@ -8,7 +8,7 @@ const today=()=>L.ymd(new Date());
 const fk=n=>n==null||n===''||isNaN(n)?'':String(Math.round(n*100)/100);
 const fdate=s=>{ try{ return L.parseYmd(s).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}); }catch(e){ return s; } };
 const clone=o=>JSON.parse(JSON.stringify(o));
-const DEF_PROFILE=()=>({v:1,target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
+const DEF_PROFILE=()=>({v:1,name:'',setup:false,target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
 const S={tab:'train',profile:DEF_PROFILE(),programs:[],sessions:[],active:null,status:'local',cap:{sample:null,downloads:null,images:false},rest:null,
   ui:{planTab:'program',lib:'all',rz:{goal:'size',focus:'full',time:30,seed:1,plan:null,wake:false},bw:null,bd:0,bpid:null,confirm:null,imp:{text:'',res:null,busy:false,err:'',images:[]},inWorkout:false,summary:null,fuelDay:today(),libAdd:false,progKey:null,msg:'',addEx:'',wuOpen:true,cd:{type:'Walk',effort:'easy',min:'',date:''},ms:{d:'',waist:'',chest:'',arm:'',thigh:''}}};
 const LS_KEY='ironlog.v1',LS_ACTIVE='ironlog.active',LS_UI='ironlog.ui';
@@ -31,11 +31,9 @@ function saveProgram(p){ const i=S.programs.findIndex(x=>x.id===p.id); if(i>=0) 
 function delProgram(id){ S.programs=S.programs.filter(p=>p.id!==id); if(S.profile.activePid===id){ S.profile.activePid=S.programs[0]?S.programs[0].id:null; S.profile.ptr={w:0,d:0,done:false}; } saveLocal(); cloudDel('programs',id); saveProfile(); }
 function ensureSeed(){
   if(S.programs.length) { if(!S.profile.activePid) S.profile.activePid=S.programs[0].id; return; }
-  const r=L.parseDSL(P9_DSL); const p=Object.assign(r.prog,{id:'p9',name:'Barry P9 (12 weeks)',built:true,added:Date.now()});
-  S.programs.push(p); S.profile.activePid='p9'; S.profile.ptr={w:6,d:0,done:false}; saveLocal(); cloudSave('programs',p); saveProfile();
 }
 function loadLocal(){
-  const d=lsGet(LS_KEY); if(d){ S.profile=Object.assign(DEF_PROFILE(),d.profile||{}); S.profile.fuel=Object.assign(DEF_PROFILE().fuel,(d.profile||{}).fuel||{}); S.programs=d.programs||[]; S.sessions=d.sessions||[]; }
+  const d=lsGet(LS_KEY); if(d){ S.profile=Object.assign(DEF_PROFILE(),d.profile||{}); S.profile.fuel=Object.assign(DEF_PROFILE().fuel,(d.profile||{}).fuel||{}); S.programs=d.programs||[]; S.sessions=d.sessions||[]; if((d.profile||{}).setup===undefined&&(S.programs.length||S.sessions.length)) S.profile.setup=true; }
   const a=lsGet(LS_ACTIVE); if(a&&a.ex) S.active=a;
   ensureSeed();
 }

@@ -69,14 +69,14 @@ function randomiserView(){
 /* ---------- recovery + cardio ---------- */
 const FEEL=['Flat','Low','OK','Good','Great'];
 function recoveryCard(){
-  const t=today(); const r=(S.profile.rec||{})[t]||{}; const lvl=L.recLevel(r); const st=L.recStats(S.profile.rec||{},new Date(),14);
+  const t=today(); const r=(S.profile.rec||{})[t]||{}; const lvl=L.recLevel(r); 
   let h='<div class="card"><div class="row between"><h3>How are you today?</h3>'+(lvl?'<span class="tag '+(lvl==='low'?'r':lvl==='good'?'g':'')+'">'+(lvl==='low'?'Take it easier':lvl==='good'?'Good to go':'Normal day')+'</span>':'')+'</div>';
   h+='<span class="lbl" style="margin-top:8px">Sleep last night (hours)</span><div class="chips">'+[5,6,7,8,9].map(n=>'<button class="chip" data-act="recset" data-k="s" data-v="'+n+'" aria-pressed="'+(r.s===n)+'">'+(n===5?'5 or less':n===9?'9 or more':n)+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:10px">How fresh do you feel</span><div class="chips">'+FEEL.map((w,i)=>'<button class="chip" data-act="recset" data-k="f" data-v="'+(i+1)+'" aria-pressed="'+(r.f===i+1)+'">'+w+'</button>').join('')+'</div>';
   if(lvl==='low') h+='<p class="small" style="margin-top:10px">Short on sleep or feeling flat. In the sleep research, heavy multi-joint lifts took the hit most. You can still train: keep weights where they feel safe and trim a set or two if form slips.</p>';
   else if(lvl==='good') h+='<p class="small" style="margin-top:10px">Rested and fresh. A good day to push your top sets.</p>';
   else if(lvl) h+='<p class="small" style="margin-top:10px">Fine to train as planned.</p>';
-  if(st.seen>=4&&st.low>=3) h+='<div class="notice" style="margin-top:10px">You have logged a low day on '+st.low+' of the last '+st.seen+' check-ins. If it keeps up, a lighter week is an option: about half the sets at the same weights. Trials have not shown a benefit from deloads on a fixed schedule, so use it when you are flat, not by the calendar.</div>';
+  L.trend(S.profile.rec||{},new Date(),S.profile.target,S.sessions).out.forEach(x=>{ h+='<div class="notice" style="margin-top:10px">'+esc(x.t)+'</div>'; });
   return h+'<p class="tiny muted" style="margin-top:8px">Takes ten seconds. The advice rules are my own, based on the sleep and deload studies in the Library.</p></div>';
 }
 function cardioCard(){
@@ -127,7 +127,7 @@ function greetLine(){
   else if(gap!=null&&gap>=5) line='A few days off. Fifteen minutes still keeps the habit.';
   else if(day) line='Next on the sheet: '+day.name+', week '+(ptr.w+1)+'.';
   else line='Pick a session and get a number on the board.';
-  return '<p class="greet"><b>'+hello+'</b> '+esc(line)+'</p>';
+  return '<p class="greet"><b>'+hello.replace('.',S.profile.name?', '+esc(S.profile.name)+'.':'.')+'</b> '+esc(line)+'</p>';
 }
 function viewTrain(){
   const now=new Date(); const tgt=S.profile.target; const wk=L.weekCounts(S.sessions,now,1)[0].count; const st=L.streak(S.sessions,now,tgt); const total=S.sessions.length;

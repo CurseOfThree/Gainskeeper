@@ -3,7 +3,8 @@ const TABS=[['train','Train'],['plan','Plan'],['progress','Progress'],['fuel','F
 function header(){ return '<div class="top"><div class="brand">'+plateLogo()+'<span>Gainskeeper<small>Strength and shape, kept.</small></span></div><div class="sync" id="sync" aria-live="polite">'+esc(syncText())+'</div></div><div class="knurl" aria-hidden="true"></div>'; }
 function render(){
   const y=window.scrollY; const app=$('#app'); const tb=$('#tabbar'); let h;
-  if(S.ui.summary){ h=viewSummary(); tb.hidden=true; }
+  if(!S.profile.setup){ h=viewSetup(); tb.hidden=true; }
+  else if(S.ui.summary){ h=viewSummary(); tb.hidden=true; }
   else if(S.ui.inWorkout&&S.active){ h=viewWorkout(); tb.hidden=true; }
   else {
     S.ui.inWorkout=false; tb.hidden=false;
@@ -118,6 +119,7 @@ const H={
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
     if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:0,d:0,done:false}; saveProfile(); }
     S.ui.imp={text:'',res:null,busy:false,err:'',images:[]}; S.ui.planTab='program'; S.ui.bpid=p.id; S.ui.bw=0; S.ui.bd=0; toast('Program saved.'); render(); },
+  setupdone:()=>{ S.profile.setup=true; saveProfile(); render(); },
   settarget:el=>{ S.profile.target=+el.dataset.v; saveProfile(); render(); },
   setday:el=>{ const v=+el.dataset.v; const a=S.profile.days||[]; S.profile.days=a.includes(v)?a.filter(x=>x!==v):a.concat(v); saveProfile(); render(); },
   seteq:el=>{ const k=el.dataset.v; S.profile.eq[k]=S.profile.eq[k]===false; saveProfile(); if(S.ui.rz.plan) rzGen(true); render(); },
@@ -139,6 +141,7 @@ const H={
 document.addEventListener('click',ev=>{ const el=ev.target.closest('[data-act]'); if(!el) return; if(el.tagName==='A') ev.preventDefault(); const f=H[el.dataset.act]; if(f) f(el,ev); });
 function readFileText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result)); r.onerror=()=>rej(r.error); r.readAsText(file); }); }
 const IN={
+  setname:(el)=>{ S.profile.name=el.value.trim().slice(0,30); saveProfile(); },
   addex:(el)=>{ S.ui.addEx=el.value; },
   wdate:(el,ph)=>{ if(ph!=='change'||!S.active) return; let v=el.value; if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) return; if(v>today()) v=today(); S.active.date=v; S.active.past=!!S.active.editing||v!==today(); if(S.active.past) S.rest=null; saveActive(); render(); },
   cdmin:el=>{ S.ui.cd.min=el.value; },
@@ -155,6 +158,11 @@ const IN={
   restore:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; try{ const d=JSON.parse(await readFileText(f)); let a=0,b=0;
       (d.programs||[]).forEach(p=>{ if(p&&p.id&&!S.programs.some(x=>x.id===p.id)){ saveProgram(p); a++; } });
       (d.sessions||[]).forEach(s=>{ if(s&&s.id&&!S.sessions.some(x=>x.id===s.id)){ saveSession(s); b++; } });
+      if(d.profile){ const dp=d.profile, p=S.profile, fresh=!S.sessions.length&&S.programs.length>0&&a===S.programs.length;
+        if(!p.setup||fresh){ ['name','target','days','eq','fuel','wu','wuOn','prog','rest'].forEach(k=>{ if(dp[k]!==undefined) p[k]=dp[k]; }); if(dp.activePid&&S.programs.some(x=>x.id===dp.activePid)){ p.activePid=dp.activePid; if(dp.ptr) p.ptr=dp.ptr; } p.setup=true; }
+        Object.keys(dp.rec||{}).forEach(k=>{ if(!p.rec[k]) p.rec[k]=dp.rec[k]; });
+        (dp.cardio||[]).forEach(c=>{ if(!p.cardio.some(x=>x.date===c.date&&x.min===c.min&&x.type===c.type)) p.cardio.push(c); });
+        (dp.meas||[]).forEach(m=>{ if(!p.meas.some(x=>x.d===m.d)) p.meas.push(m); }); saveProfile(); }
       if(d.profile&&d.profile.weights){ d.profile.weights.forEach(w=>{ if(!S.profile.weights.some(x=>x.d===w.d)) S.profile.weights.push(w); }); saveProfile(); }
       toast('Restored '+b+' sessions and '+a+' programs.'); render(); }catch(e){ toast('That file did not look like a Gainskeeper backup.'); } },
   progkey:(el,ph)=>{ if(ph==='change'){ S.ui.progKey=el.value; render(); } },
