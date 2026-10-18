@@ -13,17 +13,20 @@ function render(){
   }
   app.innerHTML=h; decorateCards(); window.scrollTo(0,y); tickClock();
 }
-function cardKey(c){ const t=c.querySelector('h2,h3'); return t?S.tab+':'+(S.tab==='plan'?S.ui.planTab+':':'')+t.textContent.trim().slice(0,40):null; }
+function cardKey(c){ const t=c.querySelector('h2,h3,.lbl'); return t?S.tab+':'+(S.tab==='plan'?S.ui.planTab+':':'')+t.textContent.trim().slice(0,40):null; }
 function decorateCards(){
   const m=$('#app main'); if(!m) return; const col=lsGet(LS_COLL)||{};
   m.querySelectorAll('.card').forEach(c=>{
-    if(c.parentElement.closest('.card')) return; const t=c.querySelector('h2,h3'); const k=cardKey(c); if(!t||!k) return;
+    if(c.parentElement.closest('.card')) return; const t=c.querySelector('h2,h3,.lbl'); const k=cardKey(c); if(!t||!k) return;
     let head=t; while(head.parentElement!==c) head=head.parentElement; if(head.querySelector('input,textarea,select')) return;
     head.classList.add('chead'); c.classList.add('hasx'); c.dataset.ck=k; if(col[k]) c.classList.add('cc');
     const b=document.createElement('button'); b.type='button'; b.className='cxb'; b.dataset.act='cx'; b.setAttribute('aria-expanded',col[k]?'false':'true'); b.setAttribute('aria-label',(col[k]?'Expand ':'Minimise ')+t.textContent.trim());
     b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'; c.appendChild(b);
   });
+  const all=document.createElement('div'); all.className='cxall'; all.innerHTML='<button type="button" class="linkbtn" data-act="cxall"></button>'; m.insertBefore(all,m.firstChild); cxLabel();
 }
+function cxLabel(){ const b=$('.cxall button'); if(!b) return; const open=document.querySelectorAll('#app main .card.hasx:not(.cc)').length; b.textContent=open?'Collapse all':'Expand all'; }
+function cxAll(){ const cards=[...document.querySelectorAll('#app main .card.hasx')]; if(!cards.length) return; const collapse=cards.some(c=>!c.classList.contains('cc')); const col=lsGet(LS_COLL)||{}; cards.forEach(c=>{ c.classList.toggle('cc',collapse); if(collapse) col[c.dataset.ck]=1; else delete col[c.dataset.ck]; const b=c.querySelector('.cxb'); if(b) b.setAttribute('aria-expanded',collapse?'false':'true'); }); lsSet(LS_COLL,col); cxLabel(); }
 function pad2(n){ return String(n).padStart(2,'0'); }
 function tickClock(){
   const el=$('#elapsed'); if(el&&S.active){ const s=Math.max(0,Math.floor((Date.now()-S.active.start)/1000)); el.textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+pad2(Math.floor(s%3600/60))+':'+pad2(s%60):pad2(Math.floor(s/60))+':'+pad2(s%60); }
@@ -130,7 +133,8 @@ const H={
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
     if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:0,d:0,done:false}; saveProfile(); }
     S.ui.imp={text:'',res:null,busy:false,err:'',images:[]}; S.ui.planTab='program'; S.ui.bpid=p.id; S.ui.bw=0; S.ui.bd=0; toast('Program saved.'); render(); },
-  cx:el=>{ const c=el.closest('.card'); const col=lsGet(LS_COLL)||{}; const k=c.dataset.ck; const on=!c.classList.contains('cc'); c.classList.toggle('cc',on); if(on) col[k]=1; else delete col[k]; lsSet(LS_COLL,col); const t=c.querySelector('h2,h3'); el.setAttribute('aria-expanded',on?'false':'true'); el.setAttribute('aria-label',(on?'Expand ':'Minimise ')+(t?t.textContent.trim():'')); },
+  cxall:()=>cxAll(),
+  cx:el=>{ const c=el.closest('.card'); const col=lsGet(LS_COLL)||{}; const k=c.dataset.ck; const on=!c.classList.contains('cc'); c.classList.toggle('cc',on); if(on) col[k]=1; else delete col[k]; lsSet(LS_COLL,col); cxLabel(); const t=c.querySelector('h2,h3,.lbl'); el.setAttribute('aria-expanded',on?'false':'true'); el.setAttribute('aria-label',(on?'Expand ':'Minimise ')+(t?t.textContent.trim():'')); },
   setupdone:()=>{ S.profile.setup=true; saveProfile(); render(); },
   settarget:el=>{ S.profile.target=+el.dataset.v; saveProfile(); render(); },
   setday:el=>{ const v=+el.dataset.v; const a=S.profile.days||[]; S.profile.days=a.includes(v)?a.filter(x=>x!==v):a.concat(v); saveProfile(); render(); },
