@@ -1,0 +1,7 @@
+{
+  "appId": "com.curseofthree.gainskeeper",
+  "appName": "Gainskeeper",
+  "webDir": "www",
+  "backgroundColor": "#0f1215",
+  "android": { "allowMixedContent": false }
+}

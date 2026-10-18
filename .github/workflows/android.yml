@@ -1,0 +1,41 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/build.js
+      - run: npx cap add android
+      - run: node scripts/patch-android.js
+      - run: npx cap sync android
+      - name: Build signed release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk gainskeeper.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gainskeeper-apk
+          path: gainskeeper.apk
+      - name: Publish as latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest gainskeeper.apk --title "Gainskeeper (build ${{ github.run_number }})" --notes "Latest build from ${{ github.sha }}" --latest
+permissions:
+  contents: write

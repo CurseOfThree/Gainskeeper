@@ -1,0 +1,10 @@
+const fs=require('fs');
+eval(fs.readFileSync(__dirname+'/../src/logic.js','utf8')+'\n'+fs.readFileSync(__dirname+'/../src/program.js','utf8')+';globalThis.L=LOGIC;globalThis.P=P9_DSL;');
+const L=globalThis.L; const {prog}=L.parseDSL(globalThis.P);
+let unk=new Set();
+prog.weeks.forEach(w=>w.days.forEach(d=>d.ex.forEach(e=>{ if(!L.tagFor(e.key)) unk.add(e.key); })));
+console.log('UNMAPPED',[...unk]);
+const day=prog.weeks[6].days[0]; const w=L.warmup(day.ex.map(e=>e.key),'std',3); console.log(w.areas.join('|'),w.drills.map(d=>d.n));
+console.log(L.warmup(prog.weeks[6].days[3].ex.map(e=>e.key),'full',0).drills.map(d=>d.n));
+console.log(L.rampFor(97.5),L.rampFor(30),L.stretchesFor(day.ex.map(e=>e.key)));
+console.log(L.warmup([], 'quick',0).drills.length);
