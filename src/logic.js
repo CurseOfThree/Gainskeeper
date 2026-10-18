@@ -110,6 +110,58 @@ function parseAny(text){
   if(/^(NAME|BLOCK)\b/im.test(t)) return parseDSL(t);
   return parseCSV(t);
 }
+
+/* ---- grid reader: tables with a name column and RANGE/LOAD column pairs per week ---- */
+function parseGrid(items){
+  const warn=[]; if(!items||!items.length) return {csv:'',weeks:0,warn:['No text found']};
+  // merge "WEEK" + number split into two items
+  let its=items.filter(i=>i&&i.t&&String(i.t).trim()).map(i=>({p:i.p||1,x:i.x,w:i.w||0,y:i.y,h:i.h||0,t:String(i.t).trim()}));
+  its.sort((a,b)=>a.p-b.p||a.y-b.y||a.x-b.x);
+  const hs=its.map(i=>i.h).filter(h=>h>0).sort((a,b)=>a-b); const tol=Math.max(1.5,(hs.length?hs[hs.length>>1]:6)*0.55);
+  const rows=[]; its.forEach(i=>{ const r=rows[rows.length-1]; if(r&&r.p===i.p&&Math.abs(i.y-r.y)<=tol){ r.it.push(i); r.y=(r.y*(r.it.length-1)+i.y)/r.it.length; } else rows.push({p:i.p,y:i.y,it:[i]}); });
+  rows.forEach(r=>{ r.it.sort((a,b)=>a.x-b.x); const m=[]; r.it.forEach(i=>{ const l=m[m.length-1]; if(l&&/^week$/i.test(l.t)&&/^\d+$/.test(i.t)){ l.t='WEEK '+i.t; l.w=i.x+i.w-l.x; } else m.push(Object.assign({},i)); }); r.it=m; r.cx=r.it.map(i=>i.x+i.w/2); });
+  const isW=i=>/^week\s*\d+$/i.test(i.t), isR=i=>/^range$/i.test(i.t), isL=i=>/^load$/i.test(i.t);
+  let weekLbl=null, rm={}, cols=null, nameMax=0, day=-1, prev=null, prevY=0; const data=[]; const blocks=[]; let blockStart=true;
+  const LIFT=/^(squat|bench|deadlift|ohp|press|overhead)$/i;
+  rows.forEach(r=>{
+    const wl=r.it.filter(isW);
+    if(wl.length>=2){ weekLbl=wl.map(i=>({n:+i.t.match(/\d+/)[0],cx:i.x+i.w/2})); day=-1; prev=null; return; }
+    const rg=r.it.filter(isR), ld=r.it.filter(isL);
+    if(rg.length>=2){
+      day++; prev=null; const pairs=rg.map((g,k)=>{ const l=ld.filter(q=>q.x>g.x&&(!rg[k+1]||q.x<rg[k+1].x))[0]; return {rx:g.x+g.w/2,lx:l?l.x+l.w/2:g.x+g.w/2+40}; });
+      const wk=pairs.map((pr,k)=>{ if(weekLbl&&weekLbl.length===pairs.length) return weekLbl[k].n; if(weekLbl){ let best=null,bd=1e9; weekLbl.forEach(w=>{ const d=Math.abs(w.cx-(pr.rx+pr.lx)/2); if(d<bd){bd=d;best=w;} }); return best.n; } return k+1; });
+      cols={pairs,wk,hdr:[].concat(...pairs.map((pr,k)=>[{cx:pr.rx,k,kind:'r'},{cx:pr.lx,k,kind:'l'}]))}; nameMax=rg[0].x-12; return; }
+    // 1RM line
+    const txt=r.it.map(i=>i.t).join(' ');
+    if(/1\s*rm/i.test(txt)&&!cols){ }
+    if(/1\s*rms?\b/i.test(txt)&&r.it.some(i=>LIFT.test(i.t))){ rm={}; r.it.forEach((i,k)=>{ const nx=r.it[k+1]; if(LIFT.test(i.t)&&nx&&/^\d+(\.\d+)?$/.test(nx.t)) rm[i.t.toLowerCase()]=parseFloat(nx.t); }); cols=null; return; }
+    if(!cols) return;
+    const nameIt=r.it.filter(i=>i.x<nameMax), cellIt=r.it.filter(i=>i.x>=nameMax);
+    if(!nameIt.length&&!cellIt.length) return;
+    if(!cellIt.length){ const nm=nameIt.map(i=>i.t).join(' ').trim(); if(prev&&!/^\*/.test(nm)&&r.y-prevY<tol*3.2){ prev.name+=' '+nm; prevY=r.y; } return; }
+    if(!nameIt.length) return;
+    const cells=cols.pairs.map(()=>({r:[],l:[]}));
+    cellIt.forEach(i=>{ const cx=i.x+i.w/2; let best=null,bd=1e9; cols.hdr.forEach(h=>{ const d=Math.abs(h.cx-cx); if(d<bd){bd=d;best=h;} }); cells[best.k][best.kind].push(i.t); });
+    const row={name:nameIt.map(i=>i.t).join(' ').trim(),day:day<0?0:day,wk:cols.wk,cells:cells.map(c=>({r:c.r.join(' ').trim(),l:c.l.join(' ').trim()})),rm:Object.assign({},rm)}; data.push(row); prev=row; prevY=r.y;
+  });
+  if(!data.length) return {csv:'',weeks:0,warn:['Could not find a table with RANGE and LOAD columns']};
+  const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+  const out=[]; const weeksSeen=new Set(); const rmByWeek={};
+  const dayName={}; data.forEach(d=>{ if(dayName[d.day]===undefined){ const w=d.name.replace(/^[AB]\)\s*/i,'').split(/\s+/).slice(0,2).join(' ').toLowerCase(); dayName[d.day]='Day '+(d.day+1)+' ('+w+')'; } });
+  data.forEach(row=>{ row.wk.forEach(n=>{ if(Object.keys(row.rm).length&&!rmByWeek[n]) rmByWeek[n]=row.rm; }); });
+  data.forEach(row=>{ row.cells.forEach((c,k)=>{ const wkn=row.wk[k]; if(!c.r) return; weeksSeen.add(wkn);
+    let rest=c.r.replace(/\s+/g,''), sets='', reps='', note=[];
+    let m=rest.match(/^(\d+)[xX×](.+)$/);
+    if(m){ sets=m[1]; reps=m[2]; } else if(/^\d+(,\d+)+$/.test(rest)){ sets=String(rest.split(',').length); reps=rest; } else { reps=rest; }
+    const tg=reps.match(/(EL|ES)$/i); if(tg&&/\d/.test(reps.slice(0,-2))){ note.push(tg[1].toUpperCase()); reps=reps.slice(0,-2); }
+    reps=reps.replace(/MIN/gi,'min').replace(/SEC/gi,'s');
+    let load=c.l, rpe='';
+    const rp=load.match(/^RPE\s*([\d.]+)\s*(?:\(([^)]*)\))?\s*(.*)$/i); if(rp){ rpe=rp[1]; load=(rp[2]||rp[3]||'').trim(); }
+    const tg2=load.match(/\s*\b(ES|EL)\b\s*$/i); if(tg2){ note.push(tg2[1].toUpperCase()); load=load.slice(0,tg2.index).trim(); }
+    out.push([wkn,dayName[row.day],row.name,sets,reps,load,rpe,note.join(' ')].map(v=>q(String(v))).join(','));
+  }); });
+  return {rmByWeek,csv:'week,day,exercise,sets,reps,load,rpe,note\n'+out.join('\n'),weeks:weeksSeen.size,days:Math.max(...data.map(d=>d.day))+1,rows:out.length,warn};
+}
 /* ---- maths ---- */
 const e1rm=(kg,reps)=>{ kg=+kg; reps=+reps; if(!(kg>0)||!(reps>0)) return 0; return reps<=1?kg:kg*(1+reps/30); };
 const roundTo=(x,s)=>{ const v=Math.round(x/s)*s; return Math.round(v*100)/100; };
@@ -376,6 +428,6 @@ function warmup(keys,len,rot){
 }
 function rampFor(kg){ kg=+kg; if(!(kg>=40)) return null; const out=[]; [[0.5,5],[0.7,3],[0.85,1]].forEach(([p,r])=>{ const k=Math.max(20,roundTo(kg*p,2.5)); if(!out.length||out[out.length-1].kg!==k) out.push({kg:k,reps:r}); }); return out; }
 function stretchesFor(keys){ const out=[]; groupsFor(keys).forEach(g=>(STR[g]||[]).forEach(s=>{ if(!out.includes(s)) out.push(s); })); return out.slice(0,6); }
-return {trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
+return {parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
 })();
 /* LOGIC:END */

@@ -5,7 +5,7 @@
   "description": "Gainskeeper: personal training log, Android app via Capacitor",
   "scripts": {
     "build": "node scripts/build.js",
-    "test": "node tests/t1.js && node tests/t2.js",
+    "test": "node tests/t1.js && node tests/t2.js && node tests/t3.js",
     "sync": "node scripts/build.js && cap sync android"
   },
   "dependencies": {

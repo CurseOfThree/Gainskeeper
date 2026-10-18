@@ -13,10 +13,11 @@ window.GK_OCR={
     const w=await FS.writeFile({path:name,data:b64,directory:'CACHE'});
     try{
       const r=await TR.processImage({path:w.uri});
+      const items=[]; (r.blocks||[]).forEach(b=>(b.lines||[]).forEach(l=>(l.elements||[]).forEach(e=>{ if(e.boundingBox&&e.text&&e.text.trim()){ const bb=e.boundingBox; items.push({p:1,x:bb.left,w:bb.right-bb.left,y:(bb.top+bb.bottom)/2,h:bb.bottom-bb.top,t:e.text.trim()}); } })));
       const lines=[]; (r.blocks||[]).forEach(b=>(b.lines||[]).forEach(l=>{ if(l.boundingBox&&l.text&&l.text.trim()) lines.push({t:l.text.trim(),l:l.boundingBox.left,c:(l.boundingBox.top+l.boundingBox.bottom)/2,h:l.boundingBox.bottom-l.boundingBox.top}); }));
-      if(!lines.length) return (r.text||'').trim();
+      if(!lines.length) return {text:(r.text||'').trim(),items};
       lines.sort((a,b)=>a.c-b.c); const rows=[]; lines.forEach(l=>{ const last=rows[rows.length-1]; if(last&&Math.abs(l.c-last.c)<Math.max(l.h,last.h||0)*0.6){ last.items.push(l); last.c=(last.c*(last.items.length-1)+l.c)/last.items.length; } else rows.push({c:l.c,h:l.h,items:[l]}); });
-      return rows.map(r=>r.items.sort((a,b)=>a.l-b.l).map(i=>i.t).join('  ')).join('\n');
+      return {text:rows.map(r=>r.items.sort((a,b)=>a.l-b.l).map(i=>i.t).join('  ')).join('\n'),items};
     } finally { try{ await FS.deleteFile({path:name,directory:'CACHE'}); }catch(e){} }
   }
 };

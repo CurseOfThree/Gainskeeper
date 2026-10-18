@@ -64,25 +64,33 @@ function addExercise(){
   const e=fromPlanItem(it,hist); e.target.repsText='8 to 12'; if(!e.sug&&h) e.sets.forEach(s=>{ s.kg=h.topKg; });
   S.active.ex.push(e); S.ui.addEx=''; saveActive(); render();
 }
+function exCount(r){ return r&&r.prog?r.prog.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.ex.length,0),0):0; }
+function autoParse(){
+  const im=S.ui.imp; im.res=null; if(!im.text||!im.text.trim()) return; let r=null, via='';
+  if(im.items&&im.items.length){ const g=L.parseGrid(im.items); if(g.rows>=3){ const rr=L.parseCSV(g.csv); if(exCount(rr)>0){ r=rr; im.text=g.csv; const wn=[...new Set(rr.prog.weeks.map((w,i)=>i+1))]; rr.prog.weeks.forEach((w,i)=>{ const m=g.rmByWeek[i+1]; if(m) w.rm=Object.assign({},m); }); via='Read as a table: '+g.weeks+' weeks, '+g.days+' days a week. Check it below.'; } } }
+  if(!r){ const rr=L.parseAny(im.text); if(exCount(rr)>0) r=rr; }
+  if(r){ im.res=r; im.res.name=r.prog.name; im.err=''; if(via) im.note=(im.note?im.note+'. ':'')+via; }
+  else im.err=(im.err?im.err+' ':'')+'I could not recognise a program layout in that text. '+(apiKey()?'Tap Ask Claude to read it, or edit the text and tap Read it.':'You can edit the text and tap Read it, or add a Claude key in Plan, Settings so Ask Claude can read messy files.');
+}
 const CLAUDE_MODEL='claude-sonnet-5-5';
 function loadLib(name){ return new Promise((res,rej)=>{ const id='lib-'+name; if(document.getElementById(id)) return res(); const sc=document.createElement('script'); sc.id=id; sc.src='lib/'+name+'.js'; sc.onload=()=>res(); sc.onerror=()=>{ sc.remove(); rej(new Error('Could not load '+name)); }; document.head.appendChild(sc); }); }
 function fileB64(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=()=>rej(r.error); r.readAsDataURL(f); }); }
 async function pdfText(f){
   await loadLib('pdf'); const pdfjs=window.pdfjsLib; pdfjs.GlobalWorkerOptions.workerSrc='lib/pdf.worker.js';
-  const doc=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise; const out=[];
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise; const out=[]; const items=[];
   for(let n=1;n<=doc.numPages;n++){ const pg=await doc.getPage(n); const tc=await pg.getTextContent(); const rows=new Map();
-    tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; const y=Math.round(it.transform[5]/3); const r=rows.get(y)||[]; r.push({x:it.transform[4],s:it.str}); rows.set(y,r); });
+    tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; items.push({p:n,x:it.transform[4],y:-it.transform[5],w:it.width,h:it.height,t:it.str}); const y=Math.round(it.transform[5]/3); const r=rows.get(y)||[]; r.push({x:it.transform[4],s:it.str}); rows.set(y,r); });
     [...rows.keys()].sort((p,q)=>q-p).forEach(y=>out.push(rows.get(y).sort((p,q)=>p.x-q.x).map(i=>i.s).join('  ').trim())); out.push(''); }
-  let text=out.join('\n').trim();
-  if(text.length<20&&window.GK_OCR&&GK_OCR.available()){ const parts=[]; const n=Math.min(doc.numPages,30);
-    for(let i=1;i<=n;i++){ S.ui.imp.note='Reading scanned page '+i+' of '+n+'...'; render(); const pg=await doc.getPage(i); const vp=pg.getViewport({scale:2}); const cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height; await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise; const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.92)); parts.push(await GK_OCR.image(blob)); }
-    text=parts.join('\n\n').trim(); }
-  return {text,pages:doc.numPages,ocr:text.length>=20&&out.join('').trim().length<20};
+  let text=out.join('\n').trim(); let ocr=false;
+  if(text.length<20&&window.GK_OCR&&GK_OCR.available()){ const parts=[]; const n=Math.min(doc.numPages,30); items.length=0;
+    for(let i=1;i<=n;i++){ S.ui.imp.note='Reading scanned page '+i+' of '+n+'...'; render(); const pg=await doc.getPage(i); const vp=pg.getViewport({scale:2}); const cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height; await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise; const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.92)); const res=await GK_OCR.image(blob); parts.push(res.text); res.items.forEach(it=>{ it.p=i; items.push(it); }); }
+    text=parts.join('\n\n').trim(); ocr=text.length>=20; }
+  return {text,items,pages:doc.numPages,ocr};
 }
 async function sheetsFrom(f){
   await loadLib('xlsx'); const wb=window.XLSX.read(await f.arrayBuffer(),{type:'array'}); const im=S.ui.imp; im.wb=wb; im.sheets=wb.SheetNames.slice(); im.sheet=0; sheetToText();
 }
-function sheetToText(){ const im=S.ui.imp; const ws=im.wb.Sheets[im.sheets[im.sheet]]; im.text=window.XLSX.utils.sheet_to_csv(ws,{blankrows:false}); im.note=(im.fileName||'Spreadsheet')+', sheet "'+im.sheets[im.sheet]+'"'; }
+function sheetToText(){ const im=S.ui.imp; const ws=im.wb.Sheets[im.sheets[im.sheet]]; im.text=window.XLSX.utils.sheet_to_csv(ws,{blankrows:false}); im.items=[]; window.XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''}).forEach((row,ri)=>row.forEach((v,ci)=>{ if(String(v).trim()) im.items.push({p:1,x:ci*100,w:90,y:ri*10,h:6,t:String(v)}); })); im.note=(im.fileName||'Spreadsheet')+', sheet "'+im.sheets[im.sheet]+'"'; }
 async function impClaude(){
   const im=S.ui.imp; const key=apiKey(); if(!key){ im.err='Add your Claude key in Plan, Settings first.'; render(); return; }
   if(!im.text.trim()&&!im.images.length&&!im.pdf){ im.err='Paste some text or attach a file or photo first.'; render(); return; }
@@ -163,7 +171,7 @@ const H={
   impread:()=>{ const im=S.ui.imp; im.err=''; im.res=L.parseAny(im.text); if(im.res.prog) im.res.name=im.res.prog.name; render(); },
   impclaude:()=>impClaude(),
   loadp9:()=>{ const im=S.ui.imp; const r=L.parseDSL(P9_DSL); im.err=''; im.note=''; im.res={prog:r.prog,warn:r.warn||[],name:'Barry P9 (12 weeks)',startW:6}; render(); },
-  impsheet:el=>{ const im=S.ui.imp; im.sheet=+el.dataset.v; sheetToText(); const r=L.parseAny(im.text); im.err=''; im.res=(r.prog&&r.prog.weeks.length)?r:null; if(im.res) im.res.name=r.prog.name; else im.err='I could not recognise a program layout on that sheet.'; render(); },
+  impsheet:el=>{ const im=S.ui.imp; im.sheet=+el.dataset.v; sheetToText(); im.err=''; autoParse(); render(); },
   clearkey:()=>{ try{ localStorage.removeItem(LS_KEY_API); }catch(e){} toast('Key removed.'); render(); },
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
     if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:im.res.startW||0,d:0,done:false}; saveProfile(); }
@@ -202,19 +210,19 @@ const IN={
   wnotes:el=>{ S.active.notes=el.value; saveActiveSoon(); },
   imptext:el=>{ S.ui.imp.text=el.value; },
   impname:el=>{ if(S.ui.imp.res) S.ui.imp.res.name=el.value; },
-  impfile:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; const im=S.ui.imp; im.err=''; im.note=''; im.fileName=f.name; im.pdf=null; im.sheets=null; im.wb=null; el.value='';
+  impfile:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; const im=S.ui.imp; im.err=''; im.note=''; im.fileName=f.name; im.pdf=null; if(!/^image\//.test(f.type)){ im.items=[]; im.photoN=0; } im.sheets=null; im.wb=null; el.value='';
     try{
       if(/^image\//.test(f.type)){
         if(apiKey()) im.images.push(f);
-        if(window.GK_OCR&&GK_OCR.available()){ im.note='Reading text from photo...'; render(); const t=await GK_OCR.image(f); im.text=(im.text&&im.text.trim()?im.text.trim()+'\n\n':'')+t; im.note='Photo read on this phone'+(apiKey()?' (also attached for Claude)':''); if(!t.trim()) im.err='No text found in that photo.'; }
+        if(window.GK_OCR&&GK_OCR.available()){ im.note='Reading text from photo...'; render(); const res=await GK_OCR.image(f); const t=res.text; im.items=(im.items||[]).concat(res.items.map(i=>Object.assign(i,{p:(im.photoN=(im.photoN||0)+(i===res.items[0]?1:0))}))); im.text=(im.text&&im.text.trim()?im.text.trim()+'\n\n':'')+t; im.note='Photo read on this phone'+(apiKey()?' (also attached for Claude)':''); if(!t.trim()) im.err='No text found in that photo.'; }
         else if(apiKey()) im.note='Photo added for Claude';
         else im.err='Reading photos needs the Android app, or a Claude key in Plan, Settings.';
       }
-      else if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)){ im.pdf=f; let txt={text:'',pages:0}; try{ txt=await pdfText(f); }catch(e){} im.text=txt.text; im.note=f.name+(txt.pages?', '+txt.pages+' pages':'')+(txt.ocr?', read as a scan':''); if(!txt.text) im.err=apiKey()?'No text found in that PDF. Use Ask Claude to read it.':'No text found in that PDF, it may be scanned. Add a Claude key in Settings to read it.'; }
+      else if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)){ im.pdf=f; let txt={text:'',pages:0}; try{ txt=await pdfText(f); }catch(e){} im.text=txt.text; im.items=txt.items; im.note=f.name+(txt.pages?', '+txt.pages+' pages':'')+(txt.ocr?', read as a scan':''); if(!txt.text) im.err=apiKey()?'No text found in that PDF. Use Ask Claude to read it.':'No text found in that PDF, it may be scanned. Add a Claude key in Settings to read it.'; }
       else if(/\.(xlsx|xls)$/i.test(f.name)) await sheetsFrom(f);
       else im.text=await readFileText(f);
     }catch(e){ im.err='Could not read that file.'; }
-    if(im.text&&im.text.trim()){ const r=L.parseAny(im.text); const n=r.prog?r.prog.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.ex.length,0),0):0; if(r.prog&&n>0){ im.res=r; im.res.name=r.prog.name; im.err=''; } else { im.res=null; im.err=(im.err?im.err+' ':'')+'I could not recognise a program layout in that text. '+(apiKey()?'Tap Ask Claude to read it, or edit the text and tap Read it.':'You can edit the text and tap Read it, or add a Claude key in Plan, Settings so Ask Claude can read messy files.'); } }
+    autoParse();
     render(); },
   restore:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; try{ const d=JSON.parse(await readFileText(f)); let a=0,b=0;
       (d.programs||[]).forEach(p=>{ if(p&&p.id&&!S.programs.some(x=>x.id===p.id)){ saveProgram(p); a++; } });
