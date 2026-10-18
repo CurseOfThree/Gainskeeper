@@ -11,7 +11,18 @@ function render(){
     const v={train:viewTrain,plan:viewPlan,progress:viewProgress,fuel:viewFuel,library:viewLibrary}[S.tab]; h=header()+'<main>'+v()+'</main>';
     tb.innerHTML='<div class="tabs" role="tablist">'+TABS.map(t=>'<button class="tab" role="tab" data-act="tab" data-v="'+t[0]+'"'+(S.tab===t[0]?' aria-current="page" aria-selected="true"':' aria-selected="false"')+'>'+ICON[t[0]]+t[1]+'</button>').join('')+'</div>';
   }
-  app.innerHTML=h; window.scrollTo(0,y); tickClock();
+  app.innerHTML=h; decorateCards(); window.scrollTo(0,y); tickClock();
+}
+function cardKey(c){ const t=c.querySelector('h2,h3'); return t?S.tab+':'+(S.tab==='plan'?S.ui.planTab+':':'')+t.textContent.trim().slice(0,40):null; }
+function decorateCards(){
+  const m=$('#app main'); if(!m) return; const col=lsGet(LS_COLL)||{};
+  m.querySelectorAll('.card').forEach(c=>{
+    if(c.parentElement.closest('.card')) return; const t=c.querySelector('h2,h3'); const k=cardKey(c); if(!t||!k) return;
+    let head=t; while(head.parentElement!==c) head=head.parentElement; if(head.querySelector('input,textarea,select')) return;
+    head.classList.add('chead'); c.classList.add('hasx'); c.dataset.ck=k; if(col[k]) c.classList.add('cc');
+    const b=document.createElement('button'); b.type='button'; b.className='cxb'; b.dataset.act='cx'; b.setAttribute('aria-expanded',col[k]?'false':'true'); b.setAttribute('aria-label',(col[k]?'Expand ':'Minimise ')+t.textContent.trim());
+    b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'; c.appendChild(b);
+  });
 }
 function pad2(n){ return String(n).padStart(2,'0'); }
 function tickClock(){
@@ -119,6 +130,7 @@ const H={
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
     if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:0,d:0,done:false}; saveProfile(); }
     S.ui.imp={text:'',res:null,busy:false,err:'',images:[]}; S.ui.planTab='program'; S.ui.bpid=p.id; S.ui.bw=0; S.ui.bd=0; toast('Program saved.'); render(); },
+  cx:el=>{ const c=el.closest('.card'); const col=lsGet(LS_COLL)||{}; const k=c.dataset.ck; const on=!c.classList.contains('cc'); c.classList.toggle('cc',on); if(on) col[k]=1; else delete col[k]; lsSet(LS_COLL,col); const t=c.querySelector('h2,h3'); el.setAttribute('aria-expanded',on?'false':'true'); el.setAttribute('aria-label',(on?'Expand ':'Minimise ')+(t?t.textContent.trim():'')); },
   setupdone:()=>{ S.profile.setup=true; saveProfile(); render(); },
   settarget:el=>{ S.profile.target=+el.dataset.v; saveProfile(); render(); },
   setday:el=>{ const v=+el.dataset.v; const a=S.profile.days||[]; S.profile.days=a.includes(v)?a.filter(x=>x!==v):a.concat(v); saveProfile(); render(); },

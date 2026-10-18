@@ -11,7 +11,7 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 const DEF_PROFILE=()=>({v:1,name:'',setup:false,target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
 const S={tab:'train',profile:DEF_PROFILE(),programs:[],sessions:[],active:null,status:'local',cap:{sample:null,downloads:null,images:false},rest:null,
   ui:{planTab:'program',lib:'all',rz:{goal:'size',focus:'full',time:30,seed:1,plan:null,wake:false},bw:null,bd:0,bpid:null,confirm:null,imp:{text:'',res:null,busy:false,err:'',images:[]},inWorkout:false,summary:null,fuelDay:today(),libAdd:false,progKey:null,msg:'',addEx:'',wuOpen:true,cd:{type:'Walk',effort:'easy',min:'',date:''},ms:{d:'',waist:'',chest:'',arm:'',thigh:''}}};
-const LS_KEY='ironlog.v1',LS_ACTIVE='ironlog.active',LS_UI='ironlog.ui';
+const LS_KEY='ironlog.v1',LS_ACTIVE='ironlog.active',LS_UI='ironlog.ui',LS_COLL='gainskeeper.collapsed';
 function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
 function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
