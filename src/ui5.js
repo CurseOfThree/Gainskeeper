@@ -158,7 +158,7 @@ const H={
   useprog:el=>{ S.profile.activePid=el.dataset.id; S.profile.ptr={w:0,d:0,done:false}; S.ui.bw=0; S.ui.bd=0; saveProfile(); toast('Program is now active.'); render(); },
   impread:()=>{ const im=S.ui.imp; im.err=''; im.res=L.parseAny(im.text); if(im.res.prog) im.res.name=im.res.prog.name; render(); },
   impclaude:()=>impClaude(),
-  impsheet:el=>{ const im=S.ui.imp; im.sheet=+el.dataset.v; sheetToText(); render(); },
+  impsheet:el=>{ const im=S.ui.imp; im.sheet=+el.dataset.v; sheetToText(); const r=L.parseAny(im.text); im.err=''; im.res=(r.prog&&r.prog.weeks.length)?r:null; if(im.res) im.res.name=r.prog.name; else im.err='I could not recognise a program layout on that sheet.'; render(); },
   clearkey:()=>{ try{ localStorage.removeItem(LS_KEY_API); }catch(e){} toast('Key removed.'); render(); },
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
     if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:0,d:0,done:false}; saveProfile(); }
@@ -204,6 +204,7 @@ const IN={
       else if(/\.(xlsx|xls)$/i.test(f.name)) await sheetsFrom(f);
       else im.text=await readFileText(f);
     }catch(e){ im.err='Could not read that file.'; }
+    if(im.text&&im.text.trim()&&!/^image\//.test(f.type)){ const r=L.parseAny(im.text); const n=r.prog?r.prog.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.ex.length,0),0):0; if(r.prog&&n>0){ im.res=r; im.res.name=r.prog.name; im.err=''; } else { im.res=null; im.err=(im.err?im.err+' ':'')+'I could not recognise a program layout in that text. '+(apiKey()?'Tap Ask Claude to read it, or edit the text and tap Read it.':'You can edit the text and tap Read it, or add a Claude key in Plan, Settings so Ask Claude can read messy files.'); } }
     render(); },
   restore:async(el,ph)=>{ if(ph!=='change') return; const f=el.files&&el.files[0]; if(!f) return; try{ const d=JSON.parse(await readFileText(f)); let a=0,b=0;
       (d.programs||[]).forEach(p=>{ if(p&&p.id&&!S.programs.some(x=>x.id===p.id)){ saveProgram(p); a++; } });
