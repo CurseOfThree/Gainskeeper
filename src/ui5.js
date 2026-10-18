@@ -162,10 +162,11 @@ const H={
   useprog:el=>{ S.profile.activePid=el.dataset.id; S.profile.ptr={w:0,d:0,done:false}; S.ui.bw=0; S.ui.bd=0; saveProfile(); toast('Program is now active.'); render(); },
   impread:()=>{ const im=S.ui.imp; im.err=''; im.res=L.parseAny(im.text); if(im.res.prog) im.res.name=im.res.prog.name; render(); },
   impclaude:()=>impClaude(),
+  loadp9:()=>{ const im=S.ui.imp; const r=L.parseDSL(P9_DSL); im.err=''; im.note=''; im.res={prog:r.prog,warn:r.warn||[],name:'Barry P9 (12 weeks)',startW:6}; render(); },
   impsheet:el=>{ const im=S.ui.imp; im.sheet=+el.dataset.v; sheetToText(); const r=L.parseAny(im.text); im.err=''; im.res=(r.prog&&r.prog.weeks.length)?r:null; if(im.res) im.res.name=r.prog.name; else im.err='I could not recognise a program layout on that sheet.'; render(); },
   clearkey:()=>{ try{ localStorage.removeItem(LS_KEY_API); }catch(e){} toast('Key removed.'); render(); },
   impsave:el=>{ const im=S.ui.imp; if(!im.res||!im.res.prog) return; const p=im.res.prog; p.id=uid(); p.name=(im.res.name||p.name||'Program').trim()||'Program'; p.added=Date.now(); saveProgram(p);
-    if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:0,d:0,done:false}; saveProfile(); }
+    if(el.dataset.a==='1'){ S.profile.activePid=p.id; S.profile.ptr={w:im.res.startW||0,d:0,done:false}; saveProfile(); }
     S.ui.imp={text:'',res:null,busy:false,err:'',images:[]}; S.ui.planTab='program'; S.ui.bpid=p.id; S.ui.bw=0; S.ui.bd=0; toast('Program saved.'); render(); },
   cxall:()=>cxAll(),
   cx:el=>{ const c=el.closest('.card'); const col=lsGet(LS_COLL)||{}; const k=c.dataset.ck; const on=!c.classList.contains('cc'); c.classList.toggle('cc',on); if(on) col[k]=1; else delete col[k]; lsSet(LS_COLL,col); cxLabel(); const t=c.querySelector('h2,h3,.lbl'); el.setAttribute('aria-expanded',on?'false':'true'); el.setAttribute('aria-label',(on?'Expand ':'Minimise ')+(t?t.textContent.trim():'')); },
