@@ -14,6 +14,12 @@ if(!g.includes('signingConfigs')){
   g=g.replace(/release \{\n(\s+)minifyEnabled false/,`release {\n$1signingConfig signingConfigs.release\n$1minifyEnabled false`);
   fs.writeFileSync(f,g);
 }
+// manifest: exact alarms for the rest timer (auto-granted on Android 13+), storage for backups on Android 9 and older
+const mf='android/app/src/main/AndroidManifest.xml'; let m=fs.readFileSync(mf,'utf8');
+const perms=['<uses-permission android:name="android.permission.USE_EXACT_ALARM" />','<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />','<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />'];
+perms.forEach(x=>{ if(!m.includes(x.split('"')[1])) m=m.replace('</manifest>','    '+x+'\n</manifest>'); });
+if(!m.includes('requestLegacyExternalStorage')) m=m.replace('<application','<application android:requestLegacyExternalStorage="true"');
+fs.writeFileSync(mf,m);
 // launcher icons and splash from resources/
 const path=require('path');
 const cp=(src,dst)=>{ for(const e of fs.readdirSync(src,{withFileTypes:true})){ const s=path.join(src,e.name),d=path.join(dst,e.name); if(e.isDirectory()){ fs.mkdirSync(d,{recursive:true}); cp(s,d); } else fs.copyFileSync(s,d); } };

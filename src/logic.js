@@ -166,7 +166,10 @@ function parseGrid(items){
 const e1rm=(kg,reps)=>{ kg=+kg; reps=+reps; if(!(kg>0)||!(reps>0)) return 0; return reps<=1?kg:kg*(1+reps/30); };
 const roundTo=(x,s)=>{ const v=Math.round(x/s)*s; return Math.round(v*100)/100; };
 function stepFor(eqKey){ return eqKey==='db'||eqKey==='kb'||eqKey==='cable'||eqKey==='mach'?1:2.5; }
-function sugLoad(e1,reps,rpe,step){ if(!(e1>0)) return null; const r=reps+(10-(rpe||8)); return Math.max(step,roundTo(e1/(1+r/30),step)); }
+// RTS-style RPE chart: % of 1RM for reps at an RPE. Index = 2*(reps-1) + 2*(10-rpe); each half RPE is one step.
+const RPE_SEQ=[100,97.8,95.5,93.9,92.2,90.7,89.2,87.8,86.3,85.0,83.7,82.4,81.1,79.9,78.6,77.4,76.2,75.1,73.9,72.3,70.7,69.4,68.0,66.7,65.3,64.0,62.6,61.3,59.9];
+function rpePct(reps,rpe){ reps=Math.max(1,Math.round(+reps||1)); rpe=Math.min(10,Math.max(5,+rpe||8)); const i=Math.round(2*(reps-1)+2*(10-rpe)); if(i<RPE_SEQ.length) return RPE_SEQ[i]; return Math.max(35,RPE_SEQ[RPE_SEQ.length-1]-(i-RPE_SEQ.length+1)*1.35); }
+function sugLoad(e1,reps,rpe,step){ if(!(e1>0)) return null; return Math.max(step,roundTo(e1*rpePct(reps,rpe||8)/100,step)); }
 function progress(last,lo,hi,step){
   // last: [{kg,reps}] done sets. Double progression.
   const sets=last.filter(s=>s.kg>0&&s.reps>0); if(!sets.length) return null;
@@ -428,6 +431,6 @@ function warmup(keys,len,rot){
 }
 function rampFor(kg){ kg=+kg; if(!(kg>=40)) return null; const out=[]; [[0.5,5],[0.7,3],[0.85,1]].forEach(([p,r])=>{ const k=Math.max(20,roundTo(kg*p,2.5)); if(!out.length||out[out.length-1].kg!==k) out.push({kg:k,reps:r}); }); return out; }
 function stretchesFor(keys){ const out=[]; groupsFor(keys).forEach(g=>(STR[g]||[]).forEach(s=>{ if(!out.includes(s)) out.push(s); })); return out.slice(0,6); }
-return {parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
+return {rpePct,parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
 })();
 /* LOGIC:END */

@@ -11,6 +11,7 @@ function render(){
     const v={train:viewTrain,plan:viewPlan,progress:viewProgress,fuel:viewFuel,library:viewLibrary}[S.tab]; h=header()+'<main>'+v()+'</main>';
     tb.innerHTML='<div class="tabs" role="tablist">'+TABS.map(t=>'<button class="tab" role="tab" data-act="tab" data-v="'+t[0]+'"'+(S.tab===t[0]?' aria-current="page" aria-selected="true"':' aria-selected="false"')+'>'+ICON[t[0]]+t[1]+'</button>').join('')+'</div>';
   }
+  if(window.GK_AWAKE) GK_AWAKE.set(!!(S.ui.inWorkout&&S.active&&S.profile.awake));
   app.innerHTML=h; decorateCards(); window.scrollTo(0,y); tickClock();
 }
 function cardKey(c){ const t=c.querySelector('h2,h3,.lbl'); return t?S.tab+':'+(S.tab==='plan'?S.ui.planTab+':':'')+t.textContent.trim().slice(0,40):null; }
@@ -28,7 +29,19 @@ function decorateCards(){
 function cxLabel(){ const b=$('.cxall button'); if(!b) return; const open=document.querySelectorAll('#app main .card.hasx:not(.cc)').length; b.textContent=open?'Collapse all':'Expand all'; }
 function cxAll(){ const cards=[...document.querySelectorAll('#app main .card.hasx')]; if(!cards.length) return; const collapse=cards.some(c=>!c.classList.contains('cc')); const col=lsGet(LS_COLL)||{}; cards.forEach(c=>{ c.classList.toggle('cc',collapse); if(collapse) col[c.dataset.ck]=1; else delete col[c.dataset.ck]; const b=c.querySelector('.cxb'); if(b) b.setAttribute('aria-expanded',collapse?'false':'true'); }); lsSet(LS_COLL,col); cxLabel(); }
 function pad2(n){ return String(n).padStart(2,'0'); }
+const LS_BK='gainskeeper.backup';
+function bkInfo(){ return lsGet(LS_BK)||{}; }
+function backupJSON(){ return JSON.stringify({app:'gainskeeper',version:1,saved:new Date().toISOString(),profile:S.profile,programs:S.programs,sessions:S.sessions},null,1); }
+async function autoBackup(force){
+  if(!window.GK_BACKUP||!GK_BACKUP.available()) return; const b=bkInfo(); const now=Date.now();
+  if(!force&&b.auto&&now-b.auto<20*3600e3) return; if(!S.sessions.length&&!S.programs.length) return;
+  try{ const f=await GK_BACKUP.write('gainskeeper-auto-'+today()+'.json',backupJSON()); lsSet(LS_BK,Object.assign(b,{auto:now,file:f,err:''})); }
+  catch(e){ lsSet(LS_BK,Object.assign(b,{err:String((e&&e.message)||e).slice(0,140)})); }
+}
+function backupAgeDays(){ const b=bkInfo(); const t=Math.max(b.auto||0,b.manual||0); return t?Math.floor((Date.now()-t)/864e5):null; }
+function restBody(){ const a=S.active; if(!a) return ''; for(const e of a.ex){ if(e.sets.some(s=>!s.done)) return 'Next: '+e.name; } return 'Rest over.'; }
 function tickClock(){
+  if(window.GK_REST) GK_REST.sync(S.rest&&!S.rest.fired?S.rest.end:0,restBody());
   const el=$('#elapsed'); if(el&&S.active){ const s=Math.max(0,Math.floor((Date.now()-S.active.start)/1000)); el.textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+pad2(Math.floor(s%3600/60))+':'+pad2(s%60):pad2(Math.floor(s/60))+':'+pad2(s%60); }
   const rb=$('#restbar'); if(!S.rest||!S.ui.inWorkout){ rb.hidden=true; return; }
   const left=Math.ceil((S.rest.end-Date.now())/1000); const t=$('#rt');
@@ -53,7 +66,7 @@ function finishWorkout(){
   const a=S.active; const ex=a.ex.map(e=>({name:e.name,key:e.key,note:e.note||'',sets:e.sets.filter(s=>s.done).map(s=>({kg:+s.kg||0,reps:+s.reps||+s.tr||0,done:true}))})).filter(e=>e.sets.length);
   if(!ex.length){ toast('Tick at least one set before finishing.'); return; }
   const s={id:a.id,date:a.date,start:a.start,dur:a.editing?(a.dur||0):a.past?0:Math.round((Date.now()-a.start)/1000),type:a.type,title:a.title,pid:a.pid||null,w:a.w==null?null:a.w,d:a.d==null?null:a.d,goal:a.goal||null,focus:a.focus||null,notes:a.notes||'',ex};
-  saveSession(s);
+  saveSession(s); autoBackup(true);
   if(!a.editing&&a.type==='program'&&a.pid===S.profile.activePid){ const prog=activeProg(); if(prog){ S.profile.ptr=L.advance(prog,{w:a.w,d:a.d}); saveProfile(); } }
   const prs=L.prsFor(s,S.sessions); S.ui.summary={s,prs}; S.active=null; lsDel(LS_ACTIVE); S.ui.inWorkout=false; S.rest=null; window.scrollTo(0,0); render();
 }
@@ -157,6 +170,8 @@ const H={
   rmset:el=>{ const e=S.active.ex[+el.dataset.i]; if(e.sets.length>1){ e.sets.pop(); saveActive(); render(); } },
   usesug:el=>{ const e=S.active.ex[+el.dataset.i]; e.sets.forEach(s=>{ if(!s.done) s.kg=e.sug.kg; }); saveActive(); render(); },
   addex:()=>addExercise(),
+  awaketoggle:()=>{ S.profile.awake=!S.profile.awake; saveProfile(); render(); },
+  backupnow:async()=>{ await autoBackup(true); const b=bkInfo(); toast(b.err?'Backup failed: '+b.err:'Backed up to '+b.file); render(); },
   resttoggle:()=>{ S.profile.rest=!S.profile.rest; if(!S.profile.rest) S.rest=null; saveProfile(); render(); },
   rest30:()=>{ if(S.rest){ S.rest.end+=30000; S.rest.fired=false; S.rest.doneAt=0; tickClock(); } },
   restskip:()=>{ S.rest=null; tickClock(); },
@@ -183,7 +198,7 @@ const H={
   setday:el=>{ const v=+el.dataset.v; const a=S.profile.days||[]; S.profile.days=a.includes(v)?a.filter(x=>x!==v):a.concat(v); saveProfile(); render(); },
   seteq:el=>{ const k=el.dataset.v; S.profile.eq[k]=S.profile.eq[k]===false; saveProfile(); if(S.ui.rz.plan) rzGen(true); render(); },
   setprog:()=>{ S.profile.prog=S.profile.prog===false; saveProfile(); render(); },
-  exportjson:()=>doDownload('gainskeeper-backup-'+today()+'.json',JSON.stringify({app:'gainskeeper',version:1,profile:S.profile,programs:S.programs,sessions:S.sessions},null,1)),
+  exportjson:async()=>{ await doDownload('gainskeeper-backup-'+today()+'.json',backupJSON()); const b=bkInfo(); b.manual=Date.now(); lsSet(LS_BK,b); },
   exportcsv:()=>{ const rows=[['date','session','exercise','set','kg','reps']]; [...S.sessions].sort((a,b)=>a.date<b.date?-1:1).forEach(s=>(s.ex||[]).forEach(e=>(e.sets||[]).forEach((x,i)=>rows.push([s.date,s.title,e.name,i+1,x.kg,x.reps])))); doDownload('gainskeeper-sessions-'+today()+'.csv',rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n')); },
   fgoal:el=>{ S.profile.fuel.goal=el.dataset.v; saveProfile(); render(); },
   fsex:el=>{ S.profile.fuel.sex=el.dataset.v; saveProfile(); render(); },
@@ -250,4 +265,5 @@ setInterval(tickClock,500);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) tickClock(); });
 /* ---------- init ---------- */
 loadLocal(); if(S.active) S.ui.inWorkout=false; render(); connect();
+setTimeout(()=>{ const b=bkInfo(); if(!b.auto||Date.now()-b.auto>7*864e5) autoBackup(true); },3000);
 })();

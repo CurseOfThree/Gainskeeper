@@ -38,3 +38,29 @@ window.GK_DOWNLOADS={
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
   }
 };
+// Rest timer notification: fires even when the phone is locked or the app is in the background.
+window.GK_REST={
+  ready:false, last:0,
+  async init(){ if(this.ready||!GK_NATIVE()) return this.ready; const LN=GK_PLUGIN('LocalNotifications');
+    try{ let p=await LN.checkPermissions(); if(p.display!=='granted') p=await LN.requestPermissions(); if(p.display!=='granted') return false;
+      await LN.createChannel({id:'rest',name:'Rest timer',description:'Tells you when rest between sets is over',importance:5,visibility:1,vibration:true}); this.ready=true; }catch(e){ console.warn('rest notify',e); }
+    return this.ready; },
+  async sync(end,body){ if(!GK_NATIVE()) return; if(end===this.last) return; this.last=end; const LN=GK_PLUGIN('LocalNotifications');
+    try{ await LN.cancel({notifications:[{id:7001}]}); }catch(e){}
+    if(!end||end<=Date.now()+1000) return; if(!(await this.init())) return;
+    try{ await LN.schedule({notifications:[{id:7001,title:'Rest over',body:body||'Time for your next set.',channelId:'rest',autoCancel:true,schedule:{at:new Date(end),allowWhileIdle:true}}]}); }catch(e){ console.warn('rest schedule',e); } }
+};
+// Keep the screen on during a workout (optional setting).
+window.GK_AWAKE={ on:false, async set(v){ v=!!v; if(v===this.on) return; this.on=v;
+  try{ if(GK_NATIVE()){ const K=GK_PLUGIN('KeepAwake'); await (v?K.keepAwake():K.allowSleep()); }
+       else if(navigator.wakeLock){ if(v) this.lock=await navigator.wakeLock.request('screen'); else if(this.lock){ await this.lock.release(); this.lock=null; } } }catch(e){} } };
+// Automatic backups into Documents/Gainskeeper on the phone. Keeps the newest 8.
+window.GK_BACKUP={
+  available:()=>GK_NATIVE(),
+  async write(name,text){ const FS=GK_PLUGIN('Filesystem');
+    try{ const p=await FS.checkPermissions(); if(p.publicStorage&&p.publicStorage!=='granted') await FS.requestPermissions(); }catch(e){}
+    await FS.writeFile({path:'Gainskeeper/'+name,data:text,directory:'DOCUMENTS',encoding:'utf8',recursive:true});
+    try{ const r=await FS.readdir({path:'Gainskeeper',directory:'DOCUMENTS'}); const names=(r.files||[]).map(f=>typeof f==='string'?f:f.name).filter(n=>/^gainskeeper-auto-.*\.json$/.test(n)).sort();
+      for(const n of names.slice(0,Math.max(0,names.length-8))){ try{ await FS.deleteFile({path:'Gainskeeper/'+n,directory:'DOCUMENTS'}); }catch(e){} } }catch(e){}
+    return 'Documents/Gainskeeper/'+name; }
+};

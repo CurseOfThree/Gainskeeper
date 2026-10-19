@@ -8,11 +8,17 @@ function suggestFor(it,hist){
   const e=Math.max(...h.slice(0,3).map(x=>x.e1)); const kg=L.sugLoad(e,it.hi,it.rpe||8,step); if(!kg) return null;
   return {kg,reps:it.hi,note:'From your best recent estimate ('+Math.round(e)+' kg for one rep), leaving about '+Math.round(10-(it.rpe||8))+' reps in reserve.'};
 }
+function rpeSug(pe,hist){
+  if(pe.rpe==null||pe.timed||!(pe.reps>0)) return null; const h=hist[pe.key]; if(!h||!h.length) return null;
+  const recent=h.slice(0,4).filter(x=>x.e1>0); if(!recent.length) return null; const e=Math.max(...recent.map(x=>x.e1));
+  const step=stepGuess(pe.key); const kg=L.sugLoad(e,pe.reps,pe.rpe,step); if(!kg) return null;
+  return {kg,reps:pe.reps,note:'RPE '+pe.rpe+' for '+pe.reps+' is about '+Math.round(L.rpePct(pe.reps,pe.rpe))+'% of your estimated max ('+Math.round(e)+' kg, from your last '+recent.length+' session'+(recent.length>1?'s':'')+'). A starting point from the RPE chart: adjust on the first set.'};
+}
 function fromProgramEx(pe,hist){
   const h=(hist[pe.key]||[])[0]; let kg=pe.kg; if(h&&(kg==null||h.topKg>kg)) kg=h.topKg;
   const sets=[]; for(let i=0;i<pe.sets;i++){ const tr=pe.repsList?pe.repsList[i]:pe.reps; sets.push({kg:kg==null?'':kg,reps:'',done:false,tr:tr==null?'':tr}); }
   const heavy=(pe.reps||10)<=6;
-  return {id:uid(),name:pe.name,key:pe.key,ss:pe.ss,note:pe.note||'',target:{sets:pe.sets,repsText:pe.repsText,lo:pe.reps,hi:pe.reps,rpe:pe.rpe,raw:pe.raw,per:pe.per,timed:pe.timed,rest:heavy?150:90},sets,sug:null};
+  return {id:uid(),name:pe.name,key:pe.key,ss:pe.ss,note:pe.note||'',target:{sets:pe.sets,repsText:pe.repsText,lo:pe.reps,hi:pe.reps,rpe:pe.rpe,raw:pe.raw,per:pe.per,timed:pe.timed,rest:heavy?150:90},sets,sug:rpeSug(pe,hist)};
 }
 function fromPlanItem(it,hist){
   const sug=suggestFor(it,hist); const sets=[]; for(let i=0;i<it.sets;i++) sets.push({kg:sug?sug.kg:'',reps:'',done:false,tr:it.hi});
@@ -135,6 +141,7 @@ function greetLine(){
 function viewTrain(){
   const now=new Date(); const tgt=S.profile.target; const wk=L.weekCounts(S.sessions,now,1)[0].count; const st=L.streak(S.sessions,now,tgt); const total=S.sessions.length;
   let h=greetLine();
+  { const age=backupAgeDays(); if(S.sessions.length>=3&&(age==null||age>14)) h+='<div class="notice" style="margin-bottom:12px">'+(age==null?'No backup yet.':'Last backup was '+age+' days ago.')+' Your log only lives on this phone. <button class="btn sm" data-act="'+(window.GK_BACKUP&&GK_BACKUP.available()?'backupnow':'exportjson')+'">Back up now</button></div>'; }
   if(S.active) h+='<div class="card" style="border-color:var(--blue)"><div class="row between"><div><span class="tag">In progress</span><h3 style="margin-top:6px">'+esc(S.active.title)+'</h3><p class="small muted">Started '+new Date(S.active.start).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit'})+'</p></div></div><div class="row" style="margin-top:10px"><button class="btn pri grow" data-act="resume">Resume</button>'+ask('discard','Discard','discardWork','')+'</div></div>';
   h+=recoveryCard();
   const need=Math.max(0,10-(total%10)); const n=L.plateCount(total);
@@ -145,7 +152,7 @@ function viewTrain(){
   if(prog){ const ptr=S.profile.ptr; const wk0=prog.weeks[ptr.w]; const day=wk0&&wk0.days[ptr.d];
     h+='<div class="card"><div class="row between"><h2>Next up</h2><span class="tag">'+esc(prog.name)+'</span></div>';
     if(day){ h+='<p style="margin:4px 0 8px"><b>Week '+(ptr.w+1)+', day '+(ptr.d+1)+': '+esc(day.name)+'</b></p>'+(S.profile.wuOn===false?'':'<p class="small muted" style="margin-bottom:8px">Warm-up focus: '+esc(L.warmupAreas(day.ex.map(e=>e.key)).join(', ')||'whole body')+'</p>')+(ptr.done?'<p class="small muted" style="margin-bottom:6px">You reached the end of this program. Repeat the last day, load a new program, or train off the book.</p>':'')+
-      '<div>'+day.ex.map(e=>{ const hh=(hist0[e.key]||[])[0]; let kg=e.kg; if(hh&&(kg==null||hh.topKg>kg)) kg=hh.topKg; const wt=kg!=null?fk(kg)+' kg'+(e.per?' '+e.per:''):(e.rpe!=null?'RPE '+e.rpe+(hh?' · last '+fk(hh.topKg)+' kg':''):(e.raw?esc(e.raw):'')); return '<div class="li" style="padding:6px 0"><span>'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+esc(e.name)+'</span><span class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+(wt?'<br><b>'+wt+'</b>':'')+'</span></div>'; }).join('')+'</div>'+
+      '<div>'+day.ex.map(e=>{ const hh=(hist0[e.key]||[])[0]; let kg=e.kg; if(hh&&(kg==null||hh.topKg>kg)) kg=hh.topKg; const rs0=e.rpe!=null?rpeSug(e,hist0):null; const wt=rs0?'RPE '+e.rpe+' · ~'+fk(rs0.kg)+' kg':kg!=null?fk(kg)+' kg'+(e.per?' '+e.per:''):(e.rpe!=null?(function(){ const rs=rpeSug(e,hist0); return 'RPE '+e.rpe+(rs?' · ~'+fk(rs.kg)+' kg':(hh?' · last '+fk(hh.topKg)+' kg':'')); })():(e.raw?esc(e.raw):'')); return '<div class="li" style="padding:6px 0"><span>'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+esc(e.name)+'</span><span class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+(wt?'<br><b>'+wt+'</b>':'')+'</span></div>'; }).join('')+'</div>'+
       '<div class="row" style="margin-top:12px"><button class="btn pri grow" data-act="startprog" data-w="'+ptr.w+'" data-d="'+ptr.d+'">Start</button><button class="btn" data-act="skipday">Skip day</button><button class="btn ghost" data-act="gotoplan">Change</button></div>'; }
     else h+='<p class="muted">This program has no sessions at this point.</p>';
     h+='</div>'; }
@@ -184,7 +191,7 @@ function viewWorkout(){
   h+=warmupCard(a);
   if(a.wake){ h+='<div class="notice" style="margin-bottom:10px"><b>Wake-up flow first:</b> '+L.WAKE.map(esc).join('. ')+'.</div>'; }
   h+='<div class="card"><label class="lbl" for="wdate">Date of this session</label><input type="date" id="wdate" data-in="wdate" max="'+today()+'" value="'+esc(a.date)+'">'+(a.past?'<p class="tiny muted" style="margin-top:6px">Logging for an earlier date. No timer or rest countdown.</p>':'')+'</div>';
-  const rb=S.profile.rest; h+='<div class="row" style="margin-bottom:10px"><button class="chip" data-act="resttoggle" aria-pressed="'+rb+'">Rest timer '+(rb?'on':'off')+'</button></div>';
+  const rb=S.profile.rest; h+='<div class="row" style="margin-bottom:10px"><button class="chip" data-act="resttoggle" aria-pressed="'+rb+'">Rest timer '+(rb?'on':'off')+'</button><button class="chip" data-act="awaketoggle" aria-pressed="'+!!S.profile.awake+'">Screen '+(S.profile.awake?'stays on':'can sleep')+'</button></div>';
   h+=a.ex.map((e,i)=>exCard(e,i,hist)).join('');
   const names=[...new Set(L.DB.map(e=>e.n).concat(Object.values(hist).map(x=>x[0].name)))].sort();
   h+='<div class="card"><span class="lbl">Add an exercise</span><div class="row"><input class="grow" list="exlist" id="addex" data-in="addex" placeholder="Start typing a name" value="'+esc(S.ui.addEx)+'"><datalist id="exlist">'+names.map(n=>'<option value="'+esc(n)+'">').join('')+'</datalist><button class="btn" data-act="addex">Add</button></div></div>';
