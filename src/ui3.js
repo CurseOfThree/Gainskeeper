@@ -65,10 +65,51 @@ function planSettings(){
   return h;
 }
 /* ---------- progress view ---------- */
+function sortedSessions(){ return [...S.sessions].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.start||0)-(a.start||0)); }
+function sessRow(s,prs){
+  const sets=(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0); const n=prs.filter(p=>p.type==='pr'||p.type==='weight').length;
+  return '<button type="button" class="li sessrow" data-act="opensess" data-id="'+esc(s.id)+'"><div class="grow"><b>'+esc(s.title)+'</b><div class="hint num">'+fdate(s.date)+' · '+sets+' sets · '+L.sessionVolume(s).toLocaleString('en-AU')+' kg'+(s.dur?' · '+Math.max(1,Math.round(s.dur/60))+' min':'')+'</div></div>'+(n?'<span class="tag y num">'+n+' PR'+(n>1?'s':'')+'</span>':'')+'<span class="chev" aria-hidden="true">›</span></button>';
+}
+function prMap(){ const m={}; S.sessions.forEach(s=>{ m[s.id]=L.prsFor(s,S.sessions); }); return m; }
+function viewHistory(){
+  const pm=prMap(); const all=sortedSessions(); const q=S.ui.histQ||'';
+  const keys={}; S.sessions.forEach(s=>(s.ex||[]).forEach(e=>{ keys[e.key]=keys[e.key]||{name:e.name,n:0}; keys[e.key].n++; }));
+  const top=Object.entries(keys).sort((a,b)=>b[1].n-a[1].n).slice(0,8);
+  const list=q==='pr'?all.filter(s=>pm[s.id].some(p=>p.type==='pr'||p.type==='weight')):q?all.filter(s=>(s.ex||[]).some(e=>e.key===q)):all;
+  let h='<div class="row" style="margin-bottom:10px"><button class="btn sm" data-act="histback">‹ Progress</button></div><div class="card"><h2>Session history</h2><p class="small muted" style="margin:4px 0 8px">'+all.length+' sessions logged. Tap one to see every set and what it beat.</p><div class="chips"><button class="chip" data-act="histq" data-v="" aria-pressed="'+(!q)+'">All</button><button class="chip" data-act="histq" data-v="pr" aria-pressed="'+(q==='pr')+'">With PRs</button>'+top.map(([k,v])=>'<button class="chip" data-act="histq" data-v="'+esc(k)+'" aria-pressed="'+(q===k)+'">'+esc(v.name)+'</button>').join('')+'</div></div>';
+  if(!list.length) return h+'<div class="card"><p class="muted">Nothing matches that yet.</p></div>';
+  let cur='';
+  list.forEach(s=>{ const m=L.parseYmd(s.date).toLocaleDateString('en-AU',{month:'long',year:'numeric'}); if(m!==cur){ if(cur) h+='</div>'; cur=m; h+='<div class="card"><h3>'+esc(m)+'</h3>'; } h+=sessRow(s,pm[s.id]); });
+  return h+'</div>';
+}
+function viewSession(){
+  const s=S.sessions.find(x=>x.id===S.ui.sess); if(!s){ S.ui.sess=null; return viewProgress(); }
+  const prs=L.prsFor(s,S.sessions); const best=prs.filter(p=>p.type==='pr'||p.type==='weight'); const base=prs.filter(p=>p.type==='baseline');
+  const sets=(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0);
+  let h='<div class="row" style="margin-bottom:10px"><button class="btn sm" data-act="closesess">‹ Back</button></div>';
+  h+='<div class="card"><h2>'+esc(s.title)+'</h2><p class="small muted" style="margin:2px 0 10px">'+esc(L.parseYmd(s.date).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'</p><div class="kv"><div><b class="num">'+(s.dur?Math.max(1,Math.round(s.dur/60)):'-')+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+L.sessionVolume(s).toLocaleString('en-AU')+'</b><span>kg moved</span></div></div></div>';
+  if(best.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>Highlights</h3>'+best.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?Math.round(p.e1)+' kg est. 1RM (was '+Math.round(p.prev)+')':fk(p.kg)+' kg (was '+fk(p.prev)+')')+'</span></div>').join('')+'</div>';
+  if(base.length) h+='<div class="card"><h3>First logged</h3>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+Math.round(p.e1)+' kg est. 1RM</span></div>').join('')+'</div>';
+  const prKeys=new Set(best.map(p=>p.key));
+  h+='<div class="card"><h3>Exercises</h3>'+(s.ex||[]).map(e=>{ const ds=(e.sets||[]); const e1=Math.max(0,...ds.filter(x=>+x.kg>0&&+x.reps>0).map(x=>L.e1rm(+x.kg,+x.reps)));
+    return '<div class="sessex"><div class="row between"><b>'+(prKeys.has(e.key)?'<span class="tag y">PR</span> ':'')+esc(e.name)+'</b>'+(e1?'<span class="tiny muted num">est. 1RM '+Math.round(e1)+' kg</span>':'')+'</div><div class="setchips num">'+ds.map((x,i)=>'<span>'+(i+1)+'. '+(+x.kg>0?fk(x.kg)+' kg × ':'')+(x.reps||'-')+'</span>').join('')+'</div>'+(e.note?'<p class="tiny muted">'+esc(e.note)+'</p>':'')+'</div>'; }).join('')+'</div>';
+  if(s.notes) h+='<div class="card"><h3>Notes</h3><p class="small" style="white-space:pre-wrap">'+esc(s.notes)+'</p></div>';
+  h+='<div class="row"><button class="btn grow" data-act="editsess" data-id="'+esc(s.id)+'">Edit this session</button></div>';
+  return h;
+}
+function bestsCard(hist){
+  const keys=Object.keys(hist).filter(k=>hist[k].some(x=>x.e1>0)).sort((a,b)=>hist[b].length-hist[a].length).slice(0,8); if(!keys.length) return '';
+  return '<div class="card"><h3>Personal bests</h3><p class="tiny muted" style="margin:2px 0 6px">Your most-trained lifts. Est. 1RM uses the Epley formula.</p>'+keys.map(k=>{ const h=hist[k]; const b=h.reduce((m,x)=>x.e1>m.e1?x:m,h[0]); const hv=h.reduce((m,x)=>x.topKg>m.topKg?x:m,h[0]);
+    return '<div class="li"><div class="grow"><b>'+esc(h[0].name)+'</b><div class="hint num">Heaviest '+fk(hv.topKg)+' kg · '+fdate(hv.date)+'</div></div><span class="num small" style="text-align:right">'+Math.round(b.e1)+' kg<br><span class="tiny muted">est. 1RM · '+fdate(b.date)+'</span></span></div>'; }).join('')+'</div>';
+}
 function viewProgress(){
+  if(S.ui.sess) return viewSession(); if(S.ui.histAll) return viewHistory();
   const hist=L.buildHist(S.sessions); const keys=Object.keys(hist).sort((a,b)=>hist[b].length-hist[a].length);
   const now=new Date(); const wc=L.weekCounts(S.sessions,now,12); const cut=L.ymd(L.addDays(now,-30)); const recent=S.sessions.filter(s=>s.date>=cut);
-  let h='<div class="card"><h3>Consistency</h3>'+bars(wc,S.profile.target)+'<p class="tiny muted">Dashed line is your weekly target. Green weeks counted toward your streak.</p></div>';
+  let h='';
+  if(S.sessions.length){ const pm={}; const rs=sortedSessions().slice(0,5); rs.forEach(s=>{ pm[s.id]=L.prsFor(s,S.sessions); });
+    h+='<div class="card"><h3>Session history</h3>'+rs.map(s=>sessRow(s,pm[s.id])).join('')+'<button class="btn sm" style="margin-top:10px" data-act="histall">See all '+S.sessions.length+' sessions</button></div>'; h+=bestsCard(hist); }
+  h+='<div class="card"><h3>Consistency</h3>'+bars(wc,S.profile.target)+'<p class="tiny muted">Dashed line is your weekly target. Green weeks counted toward your streak.</p></div>';
   h+='<div class="card"><div class="kv"><div><b class="num">'+S.sessions.length+'</b><span>sessions</span></div><div><b class="num">'+recent.length+'</b><span>last 30 days</span></div><div><b class="num">'+Math.round(recent.reduce((a,s)=>a+L.sessionVolume(s),0)/1000*10)/10+'</b><span>tonnes, 30 days</span></div></div></div>';
   const rs=L.recStats(S.profile.rec||{},new Date(),7);
   h+='<div class="card"><h3>Recovery</h3>'+(rs.seen?'<div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.sleep?rs.sleep.toFixed(1):'-')+'</b><span>avg sleep hrs, 7 days</span></div><div><b class="num">'+(rs.feel?rs.feel.toFixed(1):'-')+'</b><span>avg feel (1 to 5)</span></div><div><b class="num">'+rs.low+'</b><span>low days of '+rs.seen+'</span></div></div><div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.mood?rs.mood.toFixed(1):'-')+'</b><span>avg mood</span></div><div><b class="num">'+(rs.sore?rs.sore.toFixed(1):'-')+'</b><span>avg soreness</span></div><div><b class="num">'+(rs.str?rs.str.toFixed(1):'-')+'</b><span>avg strength</span></div></div>':'<p class="small muted" style="margin-top:6px">Answer the check-in on Train to start building this picture.</p>')+'</div>';

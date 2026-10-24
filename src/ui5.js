@@ -16,7 +16,7 @@ function render(){
 }
 function cardKey(c){ const t=c.querySelector('h2,h3,.lbl'); return t?S.tab+':'+(S.tab==='plan'?S.ui.planTab+':':'')+t.textContent.trim().slice(0,40):null; }
 function decorateCards(){
-  const m=$('#app main'); if(!m) return; const col=lsGet(LS_COLL)||{};
+  const m=$('#app main'); if(!m||S.ui.sess||S.ui.histAll) return; const col=lsGet(LS_COLL)||{};
   m.querySelectorAll('.card').forEach(c=>{
     if(c.parentElement.closest('.card')) return; const t=c.querySelector('h2,h3,.lbl'); const k=cardKey(c); if(!t||!k) return;
     let head=t; while(head.parentElement!==c) head=head.parentElement; if(head.querySelector('input,textarea,select')) return;
@@ -131,7 +131,12 @@ async function doDownload(name,data){
 }
 function setPast(){ const v=(($('#logd')||{}).value||''); if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){ toast('Pick a date first.'); return false; } if(v>today()){ toast('That date is in the future.'); return false; } S.ui.logDate=v; return true; }
 const H={
-  tab:el=>{ S.tab=el.dataset.v; window.scrollTo(0,0); render(); },
+  tab:el=>{ S.tab=el.dataset.v; S.ui.sess=null; S.ui.histAll=false; window.scrollTo(0,0); render(); },
+  opensess:el=>{ S.ui.sessBack={tab:S.tab,all:!!S.ui.histAll,y:window.scrollY}; S.tab='progress'; S.ui.sess=el.dataset.id; window.scrollTo(0,0); render(); },
+  closesess:()=>{ const b=S.ui.sessBack||{tab:'progress'}; S.ui.sess=null; S.tab=b.tab; S.ui.histAll=b.all; render(); window.scrollTo(0,b.y||0); },
+  histall:()=>{ S.ui.histAll=true; S.ui.histQ=''; window.scrollTo(0,0); render(); },
+  histback:()=>{ S.ui.histAll=false; window.scrollTo(0,0); render(); },
+  histq:el=>{ S.ui.histQ=el.dataset.v||''; render(); },
   ask:el=>{ const id=el.dataset.id; if(S.ui.confirm===id){ S.ui.confirm=null; DO[el.dataset.do](el.dataset.arg); } else { S.ui.confirm=id; render(); clearTimeout(H._ct); H._ct=setTimeout(()=>{ if(S.ui.confirm===id){ S.ui.confirm=null; render(); } },4000); } },
   resume:()=>{ S.ui.inWorkout=true; window.scrollTo(0,0); render(); },
   leave:()=>{ saveActive(); S.ui.inWorkout=false; S.rest=null; render(); },
@@ -170,6 +175,7 @@ const H={
   rmset:el=>{ const e=S.active.ex[+el.dataset.i]; if(e.sets.length>1){ e.sets.pop(); saveActive(); render(); } },
   usesug:el=>{ const e=S.active.ex[+el.dataset.i]; e.sets.forEach(s=>{ if(!s.done) s.kg=e.sug.kg; }); saveActive(); render(); },
   addex:()=>addExercise(),
+  exsug:el=>{ S.ui.addEx=el.dataset.v; addExercise(); },
   awaketoggle:()=>{ S.profile.awake=!S.profile.awake; saveProfile(); render(); },
   backupnow:async()=>{ await autoBackup(true); const b=bkInfo(); toast(b.err?'Backup failed: '+b.err:'Backed up to '+b.file); render(); },
   resttoggle:()=>{ S.profile.rest=!S.profile.rest; if(!S.profile.rest) S.rest=null; saveProfile(); render(); },
@@ -212,12 +218,14 @@ const H={
   libaddtoggle:()=>{ S.ui.libAdd=!S.ui.libAdd; render(); },
   libaddsave:()=>{ const t=($('#lt')||{}).value||''; if(!t.trim()){ toast('Add a title.'); return; } const u=(($('#lu')||{}).value||'').trim(); S.profile.customLib.push({id:'c'+uid(),title:t.trim(),url:/^https?:\/\//i.test(u)?u:'',note:(($('#ln')||{}).value||'').trim()}); S.ui.libAdd=false; S.ui.lib='mine'; saveProfile(); render(); }
 };
+document.addEventListener('keydown',ev=>{ if(ev.key==='Enter'&&ev.target&&ev.target.id==='addex'){ ev.preventDefault(); addExercise(); } });
+document.addEventListener('focusin',ev=>{ if(ev.target&&ev.target.id==='addex') setTimeout(()=>{ try{ ev.target.scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){} },350); });
 document.addEventListener('click',ev=>{ const el=ev.target.closest('[data-act]'); if(!el) return; if(el.tagName==='A') ev.preventDefault(); const f=H[el.dataset.act]; if(f) f(el,ev); });
 function readFileText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result)); r.onerror=()=>rej(r.error); r.readAsText(file); }); }
 const IN={
   apikey:(el,ph)=>{ if(ph!=='change') return; const v=el.value.trim(); if(!v) return; try{ localStorage.setItem(LS_KEY_API,v); toast('Key saved on this phone.'); }catch(e){ toast('Could not save the key.'); } render(); },
   setname:(el)=>{ S.profile.name=el.value.trim().slice(0,30); saveProfile(); },
-  addex:(el)=>{ S.ui.addEx=el.value; },
+  addex:(el,ph)=>{ if(ph==='change'||!el.isConnected) return; S.ui.addEx=el.value; const box=$('#exsug'); if(box) box.innerHTML=exSugHTML(el.value); },
   wdate:(el,ph)=>{ if(ph!=='change'||!S.active) return; let v=el.value; if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) return; if(v>today()) v=today(); S.active.date=v; S.active.past=!!S.active.editing||v!==today(); if(S.active.past) S.rest=null; saveActive(); render(); },
   cdmin:el=>{ S.ui.cd.min=el.value; },
   cddate:el=>{ S.ui.cd.date=el.value; },

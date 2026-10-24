@@ -29,6 +29,16 @@ p{margin:0}.muted{color:var(--muted)}.small{font-size:13px}.tiny{font-size:12px}
 .cxall{display:flex;justify-content:flex-end;margin:-4px 0 6px}
 .linkbtn{background:none;border:0;color:var(--muted);font:inherit;font-size:13px;padding:6px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .linkbtn:hover{color:var(--ink)}
+.exsug{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.exsug:empty{display:none}
+.exopt{display:block;width:100%;text-align:left;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--ink);font:inherit;cursor:pointer}
+.exopt:hover,.exopt:focus-visible{border-color:var(--blue)}
+.exopt.new{background:transparent;border-style:dashed;color:var(--muted)}
+.sessrow{width:100%;background:none;border:0;border-top:1px solid var(--line);color:inherit;font:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 0}
+.card h3+.sessrow{border-top:0}
+.chev{color:var(--muted);font-size:22px;line-height:1}
+.sessex{padding:10px 0;border-top:1px solid var(--line)}.card h3+.sessex{border-top:0}
+.setchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.setchips span{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:13px}
 .card.hasx{position:relative}
 .card.hasx>.chead{padding-right:40px}
 .cxb{position:absolute;top:6px;right:6px;width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}

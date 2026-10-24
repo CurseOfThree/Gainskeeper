@@ -1,4 +1,16 @@
 /* ---------- workout building ---------- */
+let EXNAMES={mine:new Set(),all:[],txt:{}};
+const TAGWORDS={bicep:'biceps arms curl',tri:'triceps arms',hpush:'chest push pecs',vpush:'shoulders delts press overhead',hpull:'back row upper back',vpull:'back lats pull',ham:'hamstrings legs',glute:'glutes legs hips',calf:'calves legs',core:'core abs',lunge:'legs quads single leg',squat:'legs quads',hinge:'posterior chain hamstrings back',cond:'conditioning cardio'};
+function exSugHTML(q){
+  q=String(q||'').trim().toLowerCase(); if(q.length<1) return '';
+  const words=q.split(/\s+/); const hits=EXNAMES.all.filter(n=>{ const l=n.toLowerCase(); const tw=(EXNAMES.txt[n]||l).split(/[\s()]+/); return words.every(w=>l.includes(w)||tw.some(x=>x.startsWith(w))); });
+  const score=n=>{ const l=n.toLowerCase(); return (EXNAMES.mine.has(L.keyOf(n))?0:10)+(l.startsWith(q)?0:l.split(/\s+/).some(w=>w.startsWith(words[0]))?2:5)+l.length/100; };
+  hits.sort((a,b)=>score(a)-score(b));
+  const exact=hits.some(n=>n.toLowerCase()===q);
+  let h=hits.slice(0,7).map(n=>'<button type="button" class="exopt" role="option" data-act="exsug" data-v="'+esc(n)+'">'+esc(n)+(EXNAMES.mine.has(L.keyOf(n))?' <span class="tiny muted">done before</span>':'')+'</button>').join('');
+  if(!exact) h+='<button type="button" class="exopt new" data-act="addex">Add "'+esc(String(S.ui.addEx).trim())+'" as a new exercise</button>';
+  return h;
+}
 function stepGuess(key){ return /(^| )(db|kb|dumbbell|kettlebell|curl|raise|flye|fly|lunge|step up|press down|pushdown)/.test(key)?1:2.5; }
 function suggestFor(it,hist){
   if(it.timed) return null; const h=hist[it.key]; if(!h||!h.length) return null;
@@ -163,7 +175,7 @@ function viewTrain(){
   const yd=L.ymd(L.addDays(new Date(),-1));
   h+='<div class="card"><h3>Missed logging a session?</h3><p class="small muted" style="margin:4px 0 10px">Pick the date it happened, then choose what you did. It counts toward that week and your history.</p><label class="lbl" for="logd">Date</label><input type="date" id="logd" max="'+today()+'" value="'+yd+'"><div class="row" style="margin-top:10px">'+(prog?'<button class="btn" data-act="pastprog">Next program day</button>':'')+'<button class="btn" data-act="pastrz">Built session above</button><button class="btn" data-act="pastfree">Empty</button></div></div>';
   const rec=[...S.sessions].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.start||0)-(a.start||0)).slice(0,6);
-  if(rec.length){ h+='<div class="card"><h3>Recent</h3>'+rec.map(s=>'<div class="li"><div class="grow"><b>'+esc(s.title)+'</b><div class="hint num">'+fdate(s.date)+' · '+(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0)+' sets · '+L.sessionVolume(s).toLocaleString('en-AU')+' kg moved</div></div>'+'<div class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-act="editsess" data-id="'+esc(s.id)+'">Edit</button>'+ask('ds'+s.id,'Delete','delSess',s.id)+'</div></div>').join('')+'</div>';
+  if(rec.length){ h+='<div class="card"><h3>Recent</h3>'+rec.map(s=>'<div class="li"><div class="grow" data-act="opensess" data-id="'+esc(s.id)+'" style="cursor:pointer"><b>'+esc(s.title)+' <span class="chev" aria-hidden="true">›</span></b><div class="hint num">'+fdate(s.date)+' · '+(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0)+' sets · '+L.sessionVolume(s).toLocaleString('en-AU')+' kg moved</div></div>'+'<div class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-act="editsess" data-id="'+esc(s.id)+'">Edit</button>'+ask('ds'+s.id,'Delete','delSess',s.id)+'</div></div>').join('')+'</div>';
     const prs=[]; rec.slice(0,4).forEach(s=>L.prsFor(s,S.sessions).filter(p=>p.type==='pr').forEach(p=>prs.push({d:s.date,p})));
     if(prs.length) h+='<div class="card"><h3>Recent PRs</h3>'+prs.slice(0,6).map(x=>'<div class="li"><span><span class="tag y">PR</span> '+esc(x.p.name)+'</span><span class="num small muted">'+Math.round(x.p.e1)+' kg est. 1RM · '+fdate(x.d)+'</span></div>').join('')+'</div>'; }
   return h;
@@ -193,8 +205,8 @@ function viewWorkout(){
   h+='<div class="card"><label class="lbl" for="wdate">Date of this session</label><input type="date" id="wdate" data-in="wdate" max="'+today()+'" value="'+esc(a.date)+'">'+(a.past?'<p class="tiny muted" style="margin-top:6px">Logging for an earlier date. No timer or rest countdown.</p>':'')+'</div>';
   const rb=S.profile.rest; h+='<div class="row" style="margin-bottom:10px"><button class="chip" data-act="resttoggle" aria-pressed="'+rb+'">Rest timer '+(rb?'on':'off')+'</button><button class="chip" data-act="awaketoggle" aria-pressed="'+!!S.profile.awake+'">Screen '+(S.profile.awake?'stays on':'can sleep')+'</button></div>';
   h+=a.ex.map((e,i)=>exCard(e,i,hist)).join('');
-  const names=[...new Set(L.DB.map(e=>e.n).concat(Object.values(hist).map(x=>x[0].name)))].sort();
-  h+='<div class="card"><span class="lbl">Add an exercise</span><div class="row"><input class="grow" list="exlist" id="addex" data-in="addex" placeholder="Start typing a name" value="'+esc(S.ui.addEx)+'"><datalist id="exlist">'+names.map(n=>'<option value="'+esc(n)+'">').join('')+'</datalist><button class="btn" data-act="addex">Add</button></div></div>';
+  const mine=Object.values(hist).map(x=>x[0].name); EXNAMES={mine:new Set(mine.map(n=>L.keyOf(n))),all:[...new Set(mine.concat(L.DB.map(e=>e.n)))]}; EXNAMES.txt={}; EXNAMES.all.forEach(n=>{ const t=L.tagFor(L.keyOf(n)); EXNAMES.txt[n]=(n+' '+(TAGWORDS[t]||'')).toLowerCase(); });
+  h+='<div class="card" id="addcard"><label class="lbl" for="addex">Add an exercise</label><div class="row"><input class="grow" id="addex" data-in="addex" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Start typing a name" value="'+esc(S.ui.addEx)+'"><button class="btn" data-act="addex">Add</button></div><div id="exsug" class="exsug" role="listbox" aria-label="Matching exercises">'+exSugHTML(S.ui.addEx)+'</div></div>';
   h+='<div class="card"><label class="lbl" for="wnotes">Notes</label><textarea id="wnotes" data-in="wnotes" placeholder="How did it feel?">'+esc(a.notes)+'</textarea></div>';
   h+='<div class="row"><button class="btn pri grow" data-act="finish">Finish workout</button>'+ask('discardw','Discard','discardWork','')+'</div>';
   return h;
