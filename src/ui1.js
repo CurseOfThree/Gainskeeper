@@ -6,9 +6,19 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const today=()=>L.ymd(new Date());
 const fk=n=>n==null||n===''||isNaN(n)?'':String(Math.round(n*100)/100);
+const LB=2.20462;
+const U=()=>(S.profile&&S.profile.unit==='lb')?'lb':'kg';
+const toU=kg=>U()==='lb'?(+kg)*LB:+kg;
+function dU(kg){ if(kg==null||kg===''||isNaN(kg)) return ''; const v=toU(+kg); return fk(U()==='lb'?Math.round(v*2)/2:Math.round(v*100)/100); }
+function fw(kg){ const s=dU(kg); return s===''?'':s+' '+U(); }
+function fw0(kg){ return (kg==null||isNaN(kg))?'':Math.round(toU(+kg))+' '+U(); }
+function fvol0(kg){ return Math.round(toU(kg)).toLocaleString('en-AU'); }
+function fvol(kg){ return fvol0(kg)+' '+U(); }
+function fromU(v){ if(v===''||v==null) return ''; const n=parseFloat(String(v).replace(',','.')); if(!isFinite(n)) return v; return U()==='lb'?Math.round(n/LB*1000)/1000:n; }
+function roundU(kg,step){ if(U()!=='lb'||!(kg>0)) return kg; const ls=(step||2.5)>=2.5?5:2.5; return Math.round(Math.round(kg*LB/ls)*ls/LB*1000)/1000; }
 const fdate=s=>{ try{ return L.parseYmd(s).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}); }catch(e){ return s; } };
 const clone=o=>JSON.parse(JSON.stringify(o));
-const DEF_PROFILE=()=>({v:1,name:'',setup:false,target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
+const DEF_PROFILE=()=>({v:1,name:'',setup:false,unit:'kg',customEx:[],rm1:{},target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
 const S={tab:'train',profile:DEF_PROFILE(),programs:[],sessions:[],active:null,status:'local',cap:{sample:null,downloads:null,images:false},rest:null,
   ui:{planTab:'program',lib:'all',rz:{goal:'size',focus:'full',time:30,seed:1,plan:null,wake:false},bw:null,bd:0,bpid:null,confirm:null,imp:{text:'',res:null,busy:false,err:'',images:[]},inWorkout:false,summary:null,fuelDay:today(),libAdd:false,progKey:null,msg:'',addEx:'',wuOpen:true,cd:{type:'Walk',effort:'easy',min:'',date:''},ms:{d:'',waist:'',chest:'',arm:'',thigh:''}}};
 const LS_KEY='ironlog.v1',LS_ACTIVE='ironlog.active',LS_UI='ironlog.ui',LS_COLL='gainskeeper.collapsed';
@@ -38,6 +48,7 @@ function loadLocal(){
   const d=lsGet(LS_KEY); if(d){ S.profile=Object.assign(DEF_PROFILE(),d.profile||{}); S.profile.fuel=Object.assign(DEF_PROFILE().fuel,(d.profile||{}).fuel||{}); S.programs=d.programs||[]; S.sessions=d.sessions||[]; if((d.profile||{}).setup===undefined&&(S.programs.length||S.sessions.length)) S.profile.setup=true; }
   const a=lsGet(LS_ACTIVE); if(a&&a.ex) S.active=a;
   ensureSeed();
+  L.setCustomEx(S.profile.customEx);
 }
 async function connect(){
   S.cap.downloads=window.GK_DOWNLOADS||null;

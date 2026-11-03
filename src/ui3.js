@@ -1,7 +1,12 @@
 /* ---------- plan view ---------- */
-const MAIN={'back squat':'squat','bench press':'bench','deadlift':'deadlift'};
-function loadText(e){
-  if(e.kg!=null) return fk(e.kg)+' kg'+(e.per?' '+e.per:'');
+const MAIN={'back squat':'squat','bench press':'bench','deadlift':'deadlift','overhead press':'ohp'};
+function myRM(key){ const r=(S.profile.rm1||{})[key]; return r&&r.kg>0?r.kg:null; }
+function estRM(key,hist){ const h=(hist||L.buildHist(S.sessions))[key]; if(!h||!h.length) return null; return Math.max(...h.slice(0,6).map(x=>x.e1)); }
+function pctBase(e,wk,hist){ const mine=myRM(e.key); if(mine) return {kg:mine,src:'your 1RM'}; const m=MAIN[e.key]; const rm=(wk&&wk.rm)||{}; if(m&&rm[m]) return {kg:rm[m],src:'program 1RM'}; const est=estRM(e.key,hist); if(est) return {kg:est,src:'estimated 1RM'}; return null; }
+function pctLoad(e,wk,hist){ if(!e||!e.pct) return null; const b=pctBase(e,wk,hist); if(!b) return null; const step=stepGuess(e.key); const kg=roundU(Math.max(step,Math.round(b.kg*e.pct/100/step)*step),step); return {kg,src:b.src,base:b.kg}; }
+function loadText(e,wk){
+  if(e.pct){ const pl=pctLoad(e,wk); return e.pct+'% of 1RM'+(pl?' · '+fw(pl.kg)+' <span class="tiny">('+pl.src+')</span>':' · add your 1RM in Progress'); }
+  if(e.kg!=null) return fw(e.kg)+''+(e.per?' '+e.per:'');
   if(e.rpe!=null) return 'RPE '+e.rpe+(e.guess!=null?' (sheet says '+fk(e.guess)+')':'');
   return e.raw?esc(e.raw):'';
 }
@@ -17,11 +22,11 @@ function planProgram(){
   const wk=prog.weeks[w]; if(!wk) return '<div class="card"><p class="muted">This program is empty.</p></div>'; if(d>=wk.days.length) d=0; const day=wk.days[d];
   let h='';
   if(S.programs.length>1) h+='<div class="card"><span class="lbl">Programs</span><div class="chips">'+S.programs.map(p=>'<button class="chip" data-act="pickprog" data-id="'+esc(p.id)+'" aria-pressed="'+(p.id===prog.id)+'">'+esc(p.name)+(p.id===S.profile.activePid?' (active)':'')+'</button>').join('')+'</div></div>';
-  h+='<div class="card"><div class="row between"><h2>'+esc(prog.name)+'</h2>'+(isAct?'<span class="tag g">Active</span>':'')+'</div><p class="small muted">'+prog.weeks.length+' weeks · '+wk.days.length+' days a week</p>';
+  h+='<div class="card">'+(S.ui.renaming===prog.id?'<label class="lbl" for="pgname">Program name</label><div class="row"><input class="grow" id="pgname" maxlength="60" value="'+esc(prog.name)+'"><button class="btn pri" data-act="saveprogname" data-id="'+esc(prog.id)+'">Save</button><button class="btn" data-act="cancelrename">Cancel</button></div>':'<div class="row between"><h2>'+esc(prog.name)+'</h2><div class="row" style="flex-wrap:nowrap;gap:6px">'+(isAct?'<span class="tag g">Active</span>':'')+'<button class="btn sm ghost" data-act="renameprog" data-id="'+esc(prog.id)+'">Rename</button></div></div>')+'<p class="small muted">'+prog.weeks.length+' weeks · '+wk.days.length+' days a week</p>';
   h+='<span class="lbl" style="margin-top:12px">Week</span><div class="chips">'+prog.weeks.map((x,i)=>'<button class="chip" style="min-width:44px;padding:7px 8px" data-act="bweek" data-v="'+i+'" aria-pressed="'+(i===w)+'">'+(i+1)+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:12px">Day</span><div class="chips">'+wk.days.map((x,i)=>'<button class="chip" data-act="bday" data-v="'+i+'" aria-pressed="'+(i===d)+'">'+esc(x.name)+'</button>').join('')+'</div></div>';
   const rm=wk.rm||{};
-  h+='<div class="card"><div class="row between"><h3>'+esc(day.name)+'</h3><span class="tag">Week '+(w+1)+'</span></div>'+(Object.keys(rm).length?'<p class="tiny muted" style="margin-top:4px">Block 1RMs: '+Object.keys(rm).map(k=>k+' '+rm[k]).join(', ')+' kg</p>':'');
+  h+='<div class="card"><div class="row between"><h3>'+esc(day.name)+'</h3><span class="tag">Week '+(w+1)+'</span></div>'+(Object.keys(rm).length?'<p class="tiny muted" style="margin-top:4px">Block 1RMs: '+Object.keys(rm).map(k=>k+' '+fw(rm[k])).join(', ')+'</p>':'');
   h+=day.ex.map(e=>{ const m=MAIN[e.key]; const pct=(m&&e.kg&&rm[m])?' · '+Math.round(e.kg/rm[m]*100)+'%':''; return '<div class="li"><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span>'+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'')+'</div><div class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+'<div class="muted">'+loadText(e)+pct+'</div></div></div>'; }).join('');
   h+='<div class="row" style="margin-top:12px">';
   if(isAct) h+='<button class="btn pri grow" data-act="startprog" data-w="'+w+'" data-d="'+d+'">Start this day</button><button class="btn" data-act="setptr" data-w="'+w+'" data-d="'+d+'">Make next</button>';
@@ -57,6 +62,8 @@ function planSettings(){
   const p=S.profile; const dn=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; const eqn=[['bb','Barbell'],['db','Dumbbells'],['mach','Machines'],['cable','Cables'],['kb','Kettlebells']];
   let h='<div class="card"><h3>Weekly target</h3><div class="chips" style="margin-top:8px">'+[2,3,4,5,6].map(n=>'<button class="chip" data-act="settarget" data-v="'+n+'" aria-pressed="'+(p.target===n)+'">'+n+' sessions</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:14px">Planned days</span><div class="chips">'+dn.map((n,i)=>'<button class="chip" data-act="setday" data-v="'+i+'" aria-pressed="'+((p.days||[]).includes(i))+'">'+n+'</button>').join('')+'</div></div>';
+  h+='<div class="card"><h3>Units</h3><p class="small muted" style="margin:4px 0 8px">For all lifting weights. Your log is stored in kg either way, so you can switch back and forth. Body weight on Fuel stays in kg.</p><div class="chips">'+[['kg','Kilograms (kg)'],['lb','Pounds (lb)']].map(x=>'<button class="chip" data-act="setunit" data-v="'+x[0]+'" aria-pressed="'+(U()===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>';
+  h+='<div class="card"><h3>Your exercises</h3><p class="small muted" style="margin:4px 0 8px">Add movements that are not in the list. Off the book sessions can pick them for the muscle group you choose, and they show up when you add an exercise.</p>'+((p.customEx||[]).length?(p.customEx||[]).map(c=>{ const t=L.TAGS.find(x=>x[0]===c.t)||['','','']; return '<div class="li"><div class="grow"><b>'+esc(c.n)+'</b><div class="hint">'+esc(t[1]+': '+t[2])+' · '+esc((EQN.find(x=>x[0]===c.q)||['','Bodyweight'])[1])+'</div></div><button class="btn sm ghost" data-act="cxdel" data-v="'+esc(c.n)+'">Remove</button></div>'; }).join(''):'')+'<label class="lbl" for="cxn" style="margin-top:8px">Name</label><input id="cxn" autocomplete="off" placeholder="For example Landmine Row"><div class="grid2" style="margin-top:8px"><div><label class="lbl" for="cxt">Muscle group</label><select id="cxt">'+typeOptions('hpull')+'</select></div><div><label class="lbl" for="cxq">Equipment</label><select id="cxq">'+eqOptions('db')+'</select></div></div><button class="btn" style="margin-top:10px" data-act="cxadd">Add exercise</button></div>';
   h+='<div class="card"><h3>Equipment for random sessions</h3><p class="small muted" style="margin:4px 0 8px">Bodyweight is always on.</p><div class="chips">'+eqn.map(x=>'<button class="chip" data-act="seteq" data-v="'+x[0]+'" aria-pressed="'+(p.eq[x[0]]!==false)+'">'+x[1]+'</button>').join('')+'</div></div>';
   h+='<div class="card"><h3>Warm-up</h3><p class="small muted" style="margin:4px 0 8px">A short dynamic warm-up built from the muscles in each session, shown at the top of your workout.</p><div class="chips"><button class="chip" data-act="wuon" aria-pressed="'+(p.wuOn!==false)+'">'+(p.wuOn!==false?'On':'Off')+'</button>'+[['quick','Quick (about 4 min)'],['std','Standard (about 7)'],['full','Full (about 10)']].map(x=>'<button class="chip" data-act="wulen" data-v="'+x[0]+'" aria-pressed="'+((p.wu||'std')===x[0])+'">'+x[1]+'</button>').join('')+'</div></div>';
   h+='<div class="card"><h3>Progression suggestions</h3><p class="small muted" style="margin:4px 0 8px">For off-book sessions only. When you hit the top of the rep range on every set, it suggests a small load jump (about 2.5%). Otherwise it suggests the same load and one more rep. Your program keeps its own progression.</p><button class="chip" data-act="setprog" aria-pressed="'+(p.prog!==false)+'">'+(p.prog!==false?'On':'Off')+'</button></div>';
@@ -68,7 +75,7 @@ function planSettings(){
 function sortedSessions(){ return [...S.sessions].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.start||0)-(a.start||0)); }
 function sessRow(s,prs){
   const sets=(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0); const n=prs.filter(p=>p.type==='pr'||p.type==='weight').length;
-  return '<button type="button" class="li sessrow" data-act="opensess" data-id="'+esc(s.id)+'"><div class="grow"><b>'+esc(s.title)+'</b><div class="hint num">'+fdate(s.date)+' · '+sets+' sets · '+L.sessionVolume(s).toLocaleString('en-AU')+' kg'+(s.dur?' · '+Math.max(1,Math.round(s.dur/60))+' min':'')+'</div></div>'+(n?'<span class="tag y num">'+n+' PR'+(n>1?'s':'')+'</span>':'')+'<span class="chev" aria-hidden="true">›</span></button>';
+  return '<button type="button" class="li sessrow" data-act="opensess" data-id="'+esc(s.id)+'"><div class="grow"><b>'+esc(s.title)+'</b><div class="hint num">'+fdate(s.date)+' · '+sets+' sets · '+fvol(L.sessionVolume(s))+''+(s.dur?' · '+Math.max(1,Math.round(s.dur/60))+' min':'')+'</div></div>'+(n?'<span class="tag y num">'+n+' PR'+(n>1?'s':'')+'</span>':'')+'<span class="chev" aria-hidden="true">›</span></button>';
 }
 function prMap(){ const m={}; S.sessions.forEach(s=>{ m[s.id]=L.prsFor(s,S.sessions); }); return m; }
 function viewHistory(){
@@ -87,20 +94,29 @@ function viewSession(){
   const prs=L.prsFor(s,S.sessions); const best=prs.filter(p=>p.type==='pr'||p.type==='weight'); const base=prs.filter(p=>p.type==='baseline');
   const sets=(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0);
   let h='<div class="row" style="margin-bottom:10px"><button class="btn sm" data-act="closesess">‹ Back</button></div>';
-  h+='<div class="card"><h2>'+esc(s.title)+'</h2><p class="small muted" style="margin:2px 0 10px">'+esc(L.parseYmd(s.date).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'</p><div class="kv"><div><b class="num">'+(s.dur?Math.max(1,Math.round(s.dur/60)):'-')+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+L.sessionVolume(s).toLocaleString('en-AU')+'</b><span>kg moved</span></div></div></div>';
-  if(best.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>Highlights</h3>'+best.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?Math.round(p.e1)+' kg est. 1RM (was '+Math.round(p.prev)+')':fk(p.kg)+' kg (was '+fk(p.prev)+')')+'</span></div>').join('')+'</div>';
-  if(base.length) h+='<div class="card"><h3>First logged</h3>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+Math.round(p.e1)+' kg est. 1RM</span></div>').join('')+'</div>';
+  h+='<div class="card"><h2>'+esc(s.title)+'</h2><p class="small muted" style="margin:2px 0 10px">'+esc(L.parseYmd(s.date).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'</p><div class="kv"><div><b class="num">'+(s.dur?Math.max(1,Math.round(s.dur/60)):'-')+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+fvol0(L.sessionVolume(s))+'</b><span>'+U()+' moved</span></div></div></div>';
+  if(best.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>Highlights</h3>'+best.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?fw0(p.e1)+' est. 1RM (was '+Math.round(toU(p.prev))+')':fw(p.kg)+' (was '+dU(p.prev)+')')+'</span></div>').join('')+'</div>';
+  if(base.length) h+='<div class="card"><h3>First logged</h3>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+fw0(p.e1)+' est. 1RM</span></div>').join('')+'</div>';
   const prKeys=new Set(best.map(p=>p.key));
   h+='<div class="card"><h3>Exercises</h3>'+(s.ex||[]).map(e=>{ const ds=(e.sets||[]); const e1=Math.max(0,...ds.filter(x=>+x.kg>0&&+x.reps>0).map(x=>L.e1rm(+x.kg,+x.reps)));
-    return '<div class="sessex"><div class="row between"><b>'+(prKeys.has(e.key)?'<span class="tag y">PR</span> ':'')+esc(e.name)+'</b>'+(e1?'<span class="tiny muted num">est. 1RM '+Math.round(e1)+' kg</span>':'')+'</div><div class="setchips num">'+ds.map((x,i)=>'<span>'+(i+1)+'. '+(+x.kg>0?fk(x.kg)+' kg × ':'')+(x.reps||'-')+'</span>').join('')+'</div>'+(e.note?'<p class="tiny muted">'+esc(e.note)+'</p>':'')+'</div>'; }).join('')+'</div>';
+    return '<div class="sessex"><div class="row between"><b>'+(prKeys.has(e.key)?'<span class="tag y">PR</span> ':'')+esc(e.name)+'</b>'+(e1?'<span class="tiny muted num">est. 1RM '+fw0(e1)+'</span>':'')+'</div><div class="setchips num">'+ds.map((x,i)=>'<span>'+(i+1)+'. '+(+x.kg>0?fw(x.kg)+' × ':'')+(x.reps||'-')+'</span>').join('')+'</div>'+(e.note?'<p class="tiny muted">'+esc(e.note)+'</p>':'')+'</div>'; }).join('')+'</div>';
   if(s.notes) h+='<div class="card"><h3>Notes</h3><p class="small" style="white-space:pre-wrap">'+esc(s.notes)+'</p></div>';
   h+='<div class="row"><button class="btn grow" data-act="editsess" data-id="'+esc(s.id)+'">Edit this session</button></div>';
   return h;
 }
+function rmCard(hist,rm){
+  const names={'back squat':'Back Squat','bench press':'Bench Press','deadlift':'Deadlift','overhead press':'Overhead Press'};
+  const keys=Object.keys(names); Object.keys(S.profile.rm1||{}).forEach(k=>{ if(!keys.includes(k)) keys.push(k); });
+  Object.keys(hist).sort((a,b)=>hist[b].length-hist[a].length).forEach(k=>{ if(keys.length<8&&!keys.includes(k)&&hist[k].some(x=>x.e1>0)) keys.push(k); });
+  let h='<div class="card"><h3>1RMs</h3><p class="small muted" style="margin:2px 0 8px">Enter a 1RM you have tested (or your coach gave you) and programs written in percentages use it. Your estimate from logged sets stays separate, next to it.</p>';
+  h+=keys.map(k=>{ const nm=(hist[k]&&hist[k][0].name)||names[k]||((S.profile.rm1[k]||{}).name)||k; const est=estRM(k,hist); const mine=myRM(k); const m=MAIN[k]; const prg=m&&rm[m];
+    return '<div class="li rmrow"><div class="grow"><b>'+esc(nm)+'</b><div class="hint num">'+(est?'Est. '+fw0(est):'No estimate yet')+(prg?' · program '+fw(prg):'')+((S.profile.rm1[k]||{}).d?' · yours set '+fdate(S.profile.rm1[k].d):'')+'</div></div><input class="rmin num" inputmode="decimal" data-in="rm1" data-k="'+esc(k)+'" data-n="'+esc(nm)+'" aria-label="Your 1RM for '+esc(nm)+' in '+U()+'" placeholder="'+U()+'" value="'+esc(mine?dU(mine):'')+'"></div>'; }).join('');
+  return h+'<p class="tiny muted" style="margin-top:8px">Leave a box empty to use the program\'s block 1RM or, failing that, your estimate.</p></div>';
+}
 function bestsCard(hist){
   const keys=Object.keys(hist).filter(k=>hist[k].some(x=>x.e1>0)).sort((a,b)=>hist[b].length-hist[a].length).slice(0,8); if(!keys.length) return '';
   return '<div class="card"><h3>Personal bests</h3><p class="tiny muted" style="margin:2px 0 6px">Your most-trained lifts. Est. 1RM uses the Epley formula.</p>'+keys.map(k=>{ const h=hist[k]; const b=h.reduce((m,x)=>x.e1>m.e1?x:m,h[0]); const hv=h.reduce((m,x)=>x.topKg>m.topKg?x:m,h[0]);
-    return '<div class="li"><div class="grow"><b>'+esc(h[0].name)+'</b><div class="hint num">Heaviest '+fk(hv.topKg)+' kg · '+fdate(hv.date)+'</div></div><span class="num small" style="text-align:right">'+Math.round(b.e1)+' kg<br><span class="tiny muted">est. 1RM · '+fdate(b.date)+'</span></span></div>'; }).join('')+'</div>';
+    return '<div class="li"><div class="grow"><b>'+esc(h[0].name)+'</b><div class="hint num">Heaviest '+fw(hv.topKg)+' · '+fdate(hv.date)+'</div></div><span class="num small" style="text-align:right">'+fw0(b.e1)+'<br><span class="tiny muted">est. 1RM · '+fdate(b.date)+'</span></span></div>'; }).join('')+'</div>';
 }
 function viewProgress(){
   if(S.ui.sess) return viewSession(); if(S.ui.histAll) return viewHistory();
@@ -110,21 +126,20 @@ function viewProgress(){
   if(S.sessions.length){ const pm={}; const rs=sortedSessions().slice(0,5); rs.forEach(s=>{ pm[s.id]=L.prsFor(s,S.sessions); });
     h+='<div class="card"><h3>Session history</h3>'+rs.map(s=>sessRow(s,pm[s.id])).join('')+'<button class="btn sm" style="margin-top:10px" data-act="histall">See all '+S.sessions.length+' sessions</button></div>'; h+=bestsCard(hist); }
   h+='<div class="card"><h3>Consistency</h3>'+bars(wc,S.profile.target)+'<p class="tiny muted">Dashed line is your weekly target. Green weeks counted toward your streak.</p></div>';
-  h+='<div class="card"><div class="kv"><div><b class="num">'+S.sessions.length+'</b><span>sessions</span></div><div><b class="num">'+recent.length+'</b><span>last 30 days</span></div><div><b class="num">'+Math.round(recent.reduce((a,s)=>a+L.sessionVolume(s),0)/1000*10)/10+'</b><span>tonnes, 30 days</span></div></div></div>';
+  h+='<div class="card"><div class="kv"><div><b class="num">'+S.sessions.length+'</b><span>sessions</span></div><div><b class="num">'+recent.length+'</b><span>last 30 days</span></div><div><b class="num">'+Math.round(toU(recent.reduce((a,s)=>a+L.sessionVolume(s),0))/1000*10)/10+'</b><span>'+(U()==='lb'?'thousand lb':'tonnes')+', 30 days</span></div></div></div>';
   const rs=L.recStats(S.profile.rec||{},new Date(),7);
   h+='<div class="card"><h3>Recovery</h3>'+(rs.seen?'<div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.sleep?rs.sleep.toFixed(1):'-')+'</b><span>avg sleep hrs, 7 days</span></div><div><b class="num">'+(rs.feel?rs.feel.toFixed(1):'-')+'</b><span>avg feel (1 to 5)</span></div><div><b class="num">'+rs.low+'</b><span>low days of '+rs.seen+'</span></div></div><div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.mood?rs.mood.toFixed(1):'-')+'</b><span>avg mood</span></div><div><b class="num">'+(rs.sore?rs.sore.toFixed(1):'-')+'</b><span>avg soreness</span></div><div><b class="num">'+(rs.str?rs.str.toFixed(1):'-')+'</b><span>avg strength</span></div></div>':'<p class="small muted" style="margin-top:6px">Answer the check-in on Train to start building this picture.</p>')+'</div>';
   h+='<div class="card"><h3>Cardio, weekly</h3>'+bars(L.cardioWeeks(S.profile.cardio,now,12),150)+'<p class="tiny muted">Moderate minutes, hard minutes counted double. Dashed line is 150.</p></div>';
   h+=measCard();
   const prog=activeProg(); const rmw=prog&&prog.weeks[Math.min(S.profile.ptr.w,prog.weeks.length-1)]; const rm=(rmw&&rmw.rm)||{};
-  const mains=[['back squat','Squat','squat'],['bench press','Bench','bench'],['deadlift','Deadlift','deadlift']];
-  h+='<div class="card"><h3>Main lifts</h3><p class="small muted" style="margin:2px 0 8px">Best estimated 1RM from your logs, against the block 1RM in your program.</p><div class="kv">'+mains.map(m=>{ const x=hist[m[0]]; const best=x?Math.round(Math.max(...x.map(y=>y.e1))):null; return '<div><b class="num">'+(best?best:'-')+'</b><span>'+m[1]+(rm[m[2]]?' · program '+rm[m[2]]:'')+'</span></div>'; }).join('')+'</div></div>';
+  h+=rmCard(hist,rm);
   if(!keys.length){ h+='<div class="card"><p class="muted">Log a session and your lifts show up here, with a chart for each.</p></div>'; return h; }
   const key=(S.ui.progKey&&hist[S.ui.progKey])?S.ui.progKey:keys[0]; const x=[...hist[key]].sort((a,b)=>a.date<b.date?-1:1);
-  const pts=x.map(y=>({x:L.parseYmd(y.date).getTime(),y:Math.round(y.e1*10)/10})); const best=Math.max(...x.map(y=>y.e1)); const first=x[0].e1;
+  const pts=x.map(y=>({x:L.parseYmd(y.date).getTime(),y:Math.round(toU(y.e1)*10)/10})); const best=Math.max(...x.map(y=>y.e1)); const first=x[0].e1;
   h+='<div class="card"><label class="lbl" for="pk">Exercise</label><select id="pk" data-in="progkey">'+keys.map(k=>'<option value="'+esc(k)+'"'+(k===key?' selected':'')+'>'+esc(hist[k][0].name)+' ('+hist[k].length+')</option>').join('')+'</select>';
   h+='<div style="margin-top:12px">'+chart(pts,{best:true,label:'Estimated one rep max over time'})+'</div><p class="tiny muted">Estimated one rep max, from weight × (1 + reps ÷ 30). It is a guide, and is less reliable above about 10 reps.</p>';
-  h+='<div class="kv" style="margin-top:10px"><div><b class="num">'+Math.round(best)+'</b><span>best est. 1RM</span></div><div><b class="num">'+Math.max(...x.map(y=>y.topKg))+'</b><span>heaviest kg</span></div><div><b class="num">'+(x.length>1?(best>=first?'+':'')+Math.round((best-first)/first*100)+'%':'-')+'</b><span>since first</span></div></div>';
-  h+=[...x].reverse().slice(0,8).map(y=>'<div class="li"><span>'+fdate(y.date)+'</span><span class="num small">'+y.sets.map(s=>fk(s.kg)+'×'+s.reps).join(', ')+'</span></div>').join('')+'</div>';
+  h+='<div class="kv" style="margin-top:10px"><div><b class="num">'+Math.round(toU(best))+'</b><span>best est. 1RM ('+U()+')</span></div><div><b class="num">'+dU(Math.max(...x.map(y=>y.topKg)))+'</b><span>heaviest '+U()+'</span></div><div><b class="num">'+(x.length>1?(best>=first?'+':'')+Math.round((best-first)/first*100)+'%':'-')+'</b><span>since first</span></div></div>';
+  h+=[...x].reverse().slice(0,8).map(y=>'<div class="li"><span>'+fdate(y.date)+'</span><span class="num small">'+y.sets.map(s=>dU(s.kg)+'×'+s.reps).join(', ')+'</span></div>').join('')+'</div>';
   return h;
 }
 
@@ -144,6 +159,7 @@ function viewSetup(){
   h+='<div class="card"><h2>Set up</h2><p class="small muted" style="margin:4px 0 10px">Everything stays on this phone. You can change any of this later in Plan, Settings.</p>';
   h+='<label class="lbl" for="sname">What should I call you?</label><input id="sname" data-in="setname" type="text" autocomplete="off" maxlength="30" value="'+esc(p.name||'')+'" placeholder="Name">';
   h+='<span class="lbl" style="margin-top:14px">Used for calorie and protein estimates</span><div class="chips">'+[['m','Male'],['f','Female']].map(x=>'<button class="chip" data-act="fsex" data-v="'+x[0]+'" aria-pressed="'+(p.fuel.sex===x[0])+'">'+x[1]+'</button>').join('')+'</div>';
+  h+='<span class="lbl" style="margin-top:14px">Weights in</span><div class="chips">'+[['kg','kg'],['lb','lb']].map(x=>'<button class="chip" data-act="setunit" data-v="'+x[0]+'" aria-pressed="'+(U()===x[0])+'">'+x[1]+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:14px">Sessions a week</span><div class="chips">'+[2,3,4,5,6].map(n=>'<button class="chip" data-act="settarget" data-v="'+n+'" aria-pressed="'+(p.target===n)+'">'+n+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:14px">Planned days</span><div class="chips">'+dn.map((n,i)=>'<button class="chip" data-act="setday" data-v="'+i+'" aria-pressed="'+((p.days||[]).includes(i))+'">'+n+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:14px">Equipment for random sessions</span><div class="chips">'+eqn.map(x=>'<button class="chip" data-act="seteq" data-v="'+x[0]+'" aria-pressed="'+(p.eq[x[0]]!==false)+'">'+x[1]+'</button>').join('')+'</div>';

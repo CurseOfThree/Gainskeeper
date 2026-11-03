@@ -19,6 +19,7 @@ function parseLoad(text,key){
   let t=o.raw; if(!t) return o;
   const m=t.match(/RPE\s*([\d.]+)/i); if(m){ o.rpe=parseFloat(m[1]); t=t.replace(m[0],' '); }
   if(/band|purp|\bez\b|bandito/i.test(t)) return o;
+  const pc=t.match(/([\d.]+)\s*%/); if(pc&&o.rpe==null){ o.pct=parseFloat(pc[1]); return o; }
   if(o.rpe!=null){ const g=t.match(/\(?\s*([\d.]+)\s*\)?/); if(g) o.guess=parseFloat(g[1]); return o; }
   t=t.replace(/\([^)]*\)/g,' ');
   const n=t.match(/([\d.]+)\s*(kgs?|lbs?)?/i); if(!n) return o;
@@ -51,7 +52,7 @@ function buildEx(nameRaw,p,note){
   let ss=null; const sm=String(nameRaw).match(/^([AB])\)\s*(.*)$/); if(sm){ ss=sm[1]; nameRaw=sm[2]; }
   const pr=prettify(nameRaw); const key=keyOf(nameRaw);
   const L=parseLoad(p.loadRaw,key);
-  return {name:pr.name,key,ss,note:[pr.note,note].filter(Boolean).join('. '),sets:p.sets,reps:p.reps==null?null:p.reps,repsList:p.repsList||null,repsText:p.repsText,per:p.per||'',timed:!!p.timed,rpe:L.rpe,kg:L.kg,guess:L.guess,raw:L.raw};
+  return {name:pr.name,key,ss,note:[pr.note,note].filter(Boolean).join('. '),sets:p.sets,reps:p.reps==null?null:p.reps,repsList:p.repsList||null,repsText:p.repsText,per:p.per||'',timed:!!p.timed,rpe:L.rpe,kg:L.kg,guess:L.guess,pct:L.pct||null,raw:L.raw};
 }
 function parseDSL(text){
   const prog={name:'Imported program',weeks:[],src:'dsl'}; const warn=[];
@@ -86,7 +87,7 @@ function exFromPlain(o){
   const pr=prettify(nm); const key=keyOf(nm);
   const ri=repsInfo(o.reps); const L=parseLoad(o.load==null?'':String(o.load),key);
   const rpe=o.rpe!=null&&o.rpe!==''?parseFloat(o.rpe):L.rpe;
-  return {name:pr.name,key,ss:ssl,note:[pr.note,o.note].filter(Boolean).join('. '),sets:Math.max(1,parseInt(o.sets,10)||3),reps:ri.reps,repsList:null,repsText:ri.repsText,per:'',timed:false,rpe:isFinite(rpe)?rpe:null,kg:L.kg,guess:L.guess,raw:L.raw};
+  return {name:pr.name,key,ss:ssl,note:[pr.note,o.note].filter(Boolean).join('. '),sets:Math.max(1,parseInt(o.sets,10)||3),reps:ri.reps,repsList:null,repsText:ri.repsText,per:'',timed:false,rpe:isFinite(rpe)?rpe:null,kg:L.kg,guess:L.guess,pct:L.pct||null,raw:L.raw};
 }
 function parseCSV(text){
   const lines=String(text).split(/\r?\n/).filter(l=>l.trim()); if(!lines.length) return {prog:null,warn:['Empty']};
@@ -260,8 +261,34 @@ const DB=[
  X('DB Curl','bicep','db'),X('Hammer Curl','bicep','db'),X('EZ Bar Curl','bicep','bb'),X('Cable Curl','bicep','cable'),X('Incline DB Curl','bicep','db'),
  X('DB Shrug','trap','db'),X('Upright Row','trap','bb'),X('Farmer Carry','trap','db',0,{timed:1}),
  X('Plank','core','bw',0,{timed:1}),X('Side Plank','core','bw',0,{timed:1}),X('Hanging Leg Raise','core','bw'),X('Ab Wheel Rollout','core','bw'),X('Cable Crunch','core','cable'),X('Dead Bug','core','bw'),X('Pallof Press','core','cable'),X('Hollow Hold','core','bw',0,{timed:1}),
- X('Burpee','cond','bw',1),X('Mountain Climber','cond','bw',0,{timed:1}),X('Kettlebell Swing','cond','kb',1),X('Goblet Squat','cond','kb',1),X('Push Up','cond','bw',1),X('Jump Squat','cond','bw',1)
+ X('Burpee','cond','bw',1),X('Mountain Climber','cond','bw',0,{timed:1}),X('Kettlebell Swing','cond','kb',1),X('Goblet Squat','cond','kb',1),X('Push Up','cond','bw',1),X('Jump Squat','cond','bw',1),
+ // added: popular movements per muscle group, skipping near-duplicates of the above
+ X('Decline Bench Press','hpush','bb',1),X('Smith Machine Bench Press','hpush','mach',1),X('DB Floor Press','hpush','db',1),X('Incline DB Flye','fly','db'),X('Low to High Cable Fly','fly','cable'),
+ X('Machine Shoulder Press','vpush','mach',1),X('Landmine Press','vpush','bb',1),X('Z Press','vpush','bb',1),X('Handstand Push Up','vpush','bw'),X('DB Front Raise','lat','db'),X('Machine Lateral Raise','lat','mach'),
+ X('T-Bar Row','hpull','bb',1),X('Meadows Row','hpull','bb',1),X('Assisted Pull Up','vpull','mach',1),X('Straight Arm Pulldown','vpull','cable'),X('Barbell Shrug','trap','bb'),
+ X('Barbell Curl','bicep','bb'),X('Preacher Curl','bicep','bb'),X('Concentration Curl','bicep','db'),X('Spider Curl','bicep','db'),X('Bayesian Cable Curl','bicep','cable'),X('Reverse Curl','bicep','bb'),X('Zottman Curl','bicep','db'),X('Drag Curl','bicep','bb'),X('Machine Curl','bicep','mach'),
+ X('Overhead Cable Triceps Extension','tri','cable'),X('DB Skull Crusher','tri','db'),X('Triceps Kickback','tri','db'),X('JM Press','tri','bb'),X('Machine Dip','tri','mach'),X('Tate Press','tri','db'),
+ X('Hack Squat','squat','mach',1),X('Smith Machine Squat','squat','mach',1),X('Safety Bar Squat','squat','bb',1),X('Belt Squat','squat','mach',1),X('DB Split Squat','lunge','db'),X('Curtsy Lunge','lunge','db'),
+ X('Single Leg RDL','hinge','db'),X('Sumo Deadlift','hinge','bb',1),X('Trap Bar Deadlift','hinge','bb',1),X('Glute Ham Raise','ham','bw'),X('Stability Ball Leg Curl','ham','bw'),X('Seated Leg Curl','ham','mach'),
+ X('Hip Abduction Machine','glute','mach'),X('Cable Glute Kickback','glute','cable'),X('Banded Lateral Walk','glute','bw'),X('Reverse Hyperextension','glute','mach'),X('Frog Pump','glute','bw'),
+ X('Seated Calf Raise','calf','mach'),X('Leg Press Calf Raise','calf','mach'),X('Donkey Calf Raise','calf','mach'),X('Tibialis Raise','calf','bw'),
+ X('Russian Twist','core','bw'),X('Bicycle Crunch','core','bw'),X('Reverse Crunch','core','bw'),X('Decline Sit Up','core','bw'),X('Cable Woodchopper','core','cable'),X('V Up','core','bw'),X('Suitcase Carry','core','db',0,{timed:1}),
+ X('Battle Ropes','cond','bw',0,{timed:1}),X('Rowing Machine Sprint','cond','mach',0,{timed:1})
 ];
+const TAGS=[['hpush','Chest','Press'],['incpush','Chest','Incline press'],['fly','Chest','Fly'],['vpush','Shoulders','Overhead press'],['lat','Shoulders','Raise'],['rdelt','Shoulders','Rear delt'],['vpull','Back','Pulldown or pull up'],['hpull','Back','Row'],['trap','Back','Traps'],['bicep','Biceps','Curl'],['tri','Triceps','Extension or press'],['squat','Quads','Squat'],['lunge','Quads','Lunge or single leg'],['quad','Quads','Isolation'],['hinge','Hamstrings','Hinge'],['ham','Hamstrings','Curl'],['glute','Glutes','Glutes'],['calf','Calves','Calves'],['core','Core','Core'],['cond','Conditioning','Conditioning']];
+const GROUP_OF={}; TAGS.forEach(t=>GROUP_OF[t[0]]=t[1]);
+const GROUPS=[...new Set(TAGS.map(t=>t[1]))];
+const COMPOUND_TAGS=new Set(['hpush','incpush','vpush','vpull','hpull','squat','hinge']);
+function setCustomEx(list){
+  for(let i=DB.length-1;i>=0;i--) if(DB[i].cu) DB.splice(i,1);
+  (list||[]).forEach(c=>{ if(!c||!c.n||!GROUP_OF[c.t]) return; if(DB.some(e=>keyOf(e.n)===keyOf(c.n))) return; DB.push(X(c.n,c.t,c.q||'bw',COMPOUND_TAGS.has(c.t)?1:0,{cu:1})); TAGMAP[keyOf(c.n)]=c.t; });
+}
+function exByGroup(){ const g={}; GROUPS.forEach(x=>g[x]=[]); const seen=new Set(); DB.forEach(e=>{ if(seen.has(e.n)) return; seen.add(e.n); const gr=GROUP_OF[e.t]; if(gr) g[gr].push(e); }); return g; }
+function replaceItem(plan,idx,name){
+  const it=plan.items[idx]; const e=DB.find(x=>x.n===name); if(!e) return plan;
+  const n=mkItem(e,idx<2?idx:5,plan.goal); n.main=it.main&&!e.timed; n.sets=it.sets; n.ss=it.ss; if(!n.main&&!n.timed){ const G=GOALS[plan.goal]; n.lo=G.acc[0]; n.hi=G.acc[1]; n.rest=G.aRest; }
+  const items=plan.items.slice(); items[idx]=n; return Object.assign({},plan,{items});
+}
 const EQW={strength:{bb:3,db:1.5,mach:.7,cable:.7,bw:.5,kb:.3},size:{bb:1.5,db:2,mach:2,cable:2,bw:1,kb:.3},define:{bb:1,db:2,mach:1.5,cable:2,bw:1.5,kb:1},stamina:{bb:.3,db:2,mach:.3,cable:1,bw:3,kb:3},general:{bb:1.5,db:1.5,mach:1,cable:1,bw:1.5,kb:1}};
 function rng(seed){ let a=seed>>>0; return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return((t^t>>>14)>>>0)/4294967296; }; }
 function eqOK(e,eq){ return e.q==='bw'||!eq||eq[e.q]!==false; }
@@ -431,6 +458,6 @@ function warmup(keys,len,rot){
 }
 function rampFor(kg){ kg=+kg; if(!(kg>=40)) return null; const out=[]; [[0.5,5],[0.7,3],[0.85,1]].forEach(([p,r])=>{ const k=Math.max(20,roundTo(kg*p,2.5)); if(!out.length||out[out.length-1].kg!==k) out.push({kg:k,reps:r}); }); return out; }
 function stretchesFor(keys){ const out=[]; groupsFor(keys).forEach(g=>(STR[g]||[]).forEach(s=>{ if(!out.includes(s)) out.push(s); })); return out.slice(0,6); }
-return {rpePct,parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
+return {TAGS,GROUP_OF,GROUPS,setCustomEx,exByGroup,replaceItem,rpePct,parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
 })();
 /* LOGIC:END */

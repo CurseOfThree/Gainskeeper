@@ -1,14 +1,28 @@
 /* ---------- workout building ---------- */
 let EXNAMES={mine:new Set(),all:[],txt:{}};
+function buildExNames(hist){ const mine=Object.values(hist).map(x=>x[0].name); EXNAMES={mine:new Set(mine.map(n=>L.keyOf(n))),all:[...new Set(mine.concat(L.DB.map(e=>e.n)))]}; EXNAMES.txt={}; EXNAMES.all.forEach(n=>{ const t=L.tagFor(L.keyOf(n)); EXNAMES.txt[n]=(n+' '+(TAGWORDS[t]||'')).toLowerCase(); }); }
 const TAGWORDS={bicep:'biceps arms curl',tri:'triceps arms',hpush:'chest push pecs',vpush:'shoulders delts press overhead',hpull:'back row upper back',vpull:'back lats pull',ham:'hamstrings legs',glute:'glutes legs hips',calf:'calves legs',core:'core abs',lunge:'legs quads single leg',squat:'legs quads',hinge:'posterior chain hamstrings back',cond:'conditioning cardio'};
+function typeOptions(sel){ let h='',g=''; L.TAGS.forEach(t=>{ if(t[1]!==g){ if(g) h+='</optgroup>'; g=t[1]; h+='<optgroup label="'+esc(g)+'">'; } h+='<option value="'+t[0]+'"'+(t[0]===sel?' selected':'')+'>'+esc(t[1]+': '+t[2])+'</option>'; }); return h+'</optgroup>'; }
+const EQN=[['bb','Barbell'],['db','Dumbbells'],['mach','Machine'],['cable','Cable'],['kb','Kettlebell'],['bw','Bodyweight or band']];
+function eqOptions(sel){ return EQN.map(x=>'<option value="'+x[0]+'"'+(x[0]===sel?' selected':'')+'>'+x[1]+'</option>').join(''); }
+function groupBrowse(act,cur,filterEq){
+  const g=L.exByGroup(); const grp=cur&&g[cur]?cur:null;
+  let h='<div class="chips" style="margin-top:4px">'+L.GROUPS.map(x=>'<button type="button" class="chip" data-act="'+act+'grp" data-v="'+esc(x)+'" aria-pressed="'+(x===grp)+'">'+esc(x)+'</button>').join('')+'</div>';
+  if(grp){ let list=g[grp]; if(filterEq) list=list.filter(e=>e.q==='bw'||S.profile.eq[e.q]!==false);
+    list=list.slice().sort((a,b)=>(EXNAMES.mine.has(L.keyOf(b.n))?1:0)-(EXNAMES.mine.has(L.keyOf(a.n))?1:0)||a.n.localeCompare(b.n));
+    h+='<div class="exsug">'+list.map(e=>'<button type="button" class="exopt" data-act="'+act+'pick" data-v="'+esc(e.n)+'">'+esc(e.n)+' <span class="tiny muted">'+esc((L.TAGS.find(t=>t[0]===e.t)||['','',''])[2])+(e.cu?' · yours':'')+(EXNAMES.mine.has(L.keyOf(e.n))?' · done before':'')+'</span></button>').join('')+'</div>'; }
+  return h;
+}
 function exSugHTML(q){
-  q=String(q||'').trim().toLowerCase(); if(q.length<1) return '';
+  q=String(q||'').trim().toLowerCase();
+  if(S.ui.addNew) return '<div class="newex"><p class="small" style="margin:0 0 6px">New exercise: <b>'+esc(String(S.ui.addEx).trim())+'</b></p><label class="lbl" for="nxt">Muscle group</label><select id="nxt">'+typeOptions('hpush')+'</select><label class="lbl" for="nxq" style="margin-top:8px">Equipment</label><select id="nxq">'+eqOptions('db')+'</select><div class="row" style="margin-top:10px"><button type="button" class="btn pri grow" data-act="addnewsave">Add and save to my exercises</button><button type="button" class="btn" data-act="addex">Just add</button></div></div>';
+  if(q.length<1) return '<p class="tiny muted" style="margin:2px 0 0">Or browse by muscle group:</p>'+groupBrowse('add',S.ui.addGrp,false);
   const words=q.split(/\s+/); const hits=EXNAMES.all.filter(n=>{ const l=n.toLowerCase(); const tw=(EXNAMES.txt[n]||l).split(/[\s()]+/); return words.every(w=>l.includes(w)||tw.some(x=>x.startsWith(w))); });
   const score=n=>{ const l=n.toLowerCase(); return (EXNAMES.mine.has(L.keyOf(n))?0:10)+(l.startsWith(q)?0:l.split(/\s+/).some(w=>w.startsWith(words[0]))?2:5)+l.length/100; };
   hits.sort((a,b)=>score(a)-score(b));
   const exact=hits.some(n=>n.toLowerCase()===q);
-  let h=hits.slice(0,7).map(n=>'<button type="button" class="exopt" role="option" data-act="exsug" data-v="'+esc(n)+'">'+esc(n)+(EXNAMES.mine.has(L.keyOf(n))?' <span class="tiny muted">done before</span>':'')+'</button>').join('');
-  if(!exact) h+='<button type="button" class="exopt new" data-act="addex">Add "'+esc(String(S.ui.addEx).trim())+'" as a new exercise</button>';
+  let h=hits.slice(0,7).map(n=>'<button type="button" class="exopt" role="option" data-act="exsug" data-v="'+esc(n)+'">'+esc(n)+' <span class="tiny muted">'+esc(L.GROUP_OF[L.tagFor(L.keyOf(n))]||'')+(EXNAMES.mine.has(L.keyOf(n))?' · done before':'')+'</span></button>').join('');
+  if(!exact) h+='<button type="button" class="exopt new" data-act="addnew">Add "'+esc(String(S.ui.addEx).trim())+'" as a new exercise</button>';
   return h;
 }
 function stepGuess(key){ return /(^| )(db|kb|dumbbell|kettlebell|curl|raise|flye|fly|lunge|step up|press down|pushdown)/.test(key)?1:2.5; }
@@ -16,21 +30,21 @@ function suggestFor(it,hist){
   if(it.timed) return null; const h=hist[it.key]; if(!h||!h.length) return null;
   const step=L.stepFor(it.eq||'bb'); const last=h[0];
   const inRange=last.sets.every(s=>s.reps>=it.lo-2&&s.reps<=it.hi+2);
-  if(inRange&&S.profile.prog){ const p=L.progress(last.sets,it.lo,it.hi,step); if(p) return {kg:p.kg,reps:p.reps,note:p.note}; }
+  if(inRange&&S.profile.prog){ const p=L.progress(last.sets,it.lo,it.hi,step); if(p) return {kg:roundU(p.kg,step),reps:p.reps,note:p.note}; }
   const e=Math.max(...h.slice(0,3).map(x=>x.e1)); const kg=L.sugLoad(e,it.hi,it.rpe||8,step); if(!kg) return null;
-  return {kg,reps:it.hi,note:'From your best recent estimate ('+Math.round(e)+' kg for one rep), leaving about '+Math.round(10-(it.rpe||8))+' reps in reserve.'};
+  return {kg:roundU(kg,step),reps:it.hi,note:'From your best recent estimate ('+fw0(e)+' for one rep), leaving about '+Math.round(10-(it.rpe||8))+' reps in reserve.'};
 }
 function rpeSug(pe,hist){
   if(pe.rpe==null||pe.timed||!(pe.reps>0)) return null; const h=hist[pe.key]; if(!h||!h.length) return null;
   const recent=h.slice(0,4).filter(x=>x.e1>0); if(!recent.length) return null; const e=Math.max(...recent.map(x=>x.e1));
   const step=stepGuess(pe.key); const kg=L.sugLoad(e,pe.reps,pe.rpe,step); if(!kg) return null;
-  return {kg,reps:pe.reps,note:'RPE '+pe.rpe+' for '+pe.reps+' is about '+Math.round(L.rpePct(pe.reps,pe.rpe))+'% of your estimated max ('+Math.round(e)+' kg, from your last '+recent.length+' session'+(recent.length>1?'s':'')+'). A starting point from the RPE chart: adjust on the first set.'};
+  return {kg:roundU(kg,step),reps:pe.reps,note:'RPE '+pe.rpe+' for '+pe.reps+' is about '+Math.round(L.rpePct(pe.reps,pe.rpe))+'% of your estimated max ('+fw0(e)+', from your last '+recent.length+' session'+(recent.length>1?'s':'')+'). A starting point from the RPE chart: adjust on the first set.'};
 }
-function fromProgramEx(pe,hist){
-  const h=(hist[pe.key]||[])[0]; let kg=pe.kg; if(h&&(kg==null||h.topKg>kg)) kg=h.topKg;
+function fromProgramEx(pe,hist,wk){
+  const h=(hist[pe.key]||[])[0]; let kg=pe.kg; if(h&&(kg==null||h.topKg>kg)) kg=h.topKg; const pl=pctLoad(pe,wk,hist); if(pl) kg=pl.kg;
   const sets=[]; for(let i=0;i<pe.sets;i++){ const tr=pe.repsList?pe.repsList[i]:pe.reps; sets.push({kg:kg==null?'':kg,reps:'',done:false,tr:tr==null?'':tr}); }
   const heavy=(pe.reps||10)<=6;
-  return {id:uid(),name:pe.name,key:pe.key,ss:pe.ss,note:pe.note||'',target:{sets:pe.sets,repsText:pe.repsText,lo:pe.reps,hi:pe.reps,rpe:pe.rpe,raw:pe.raw,per:pe.per,timed:pe.timed,rest:heavy?150:90},sets,sug:rpeSug(pe,hist)};
+  return {id:uid(),name:pe.name,key:pe.key,ss:pe.ss,note:pe.note||'',target:{sets:pe.sets,repsText:pe.repsText,lo:pe.reps,hi:pe.reps,rpe:pe.rpe,raw:pe.raw,per:pe.per,timed:pe.timed,rest:heavy?150:90},sets,sug:pl?{kg:pl.kg,reps:pe.reps,note:pe.pct+'% of your '+pl.src.replace(/ 1RM$/,'')+' 1RM ('+fw(pl.base)+').'}:rpeSug(pe,hist)};
 }
 function fromPlanItem(it,hist){
   const sug=suggestFor(it,hist); const sets=[]; for(let i=0;i<it.sets;i++) sets.push({kg:sug?sug.kg:'',reps:'',done:false,tr:it.hi});
@@ -43,7 +57,7 @@ const wdate=()=>S.ui.logDate||today();
 function startWorkout(a){ toast(''); a.past=a.date!==today(); S.ui.logDate=''; S.active=a; S.ui.inWorkout=true; S.ui.summary=null; saveActive(); S.rest=null; try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{}); }catch(e){} window.scrollTo(0,0); render(); }
 function startProgram(w,d){
   const prog=activeProg(); if(!prog||!prog.weeks[w]||!prog.weeks[w].days[d]) return; const day=prog.weeks[w].days[d]; const hist=L.buildHist(S.sessions);
-  startWorkout({id:uid(),start:Date.now(),date:wdate(),type:'program',title:day.name+' (week '+(w+1)+')',pid:prog.id,w,d,notes:'',ex:day.ex.map(e=>fromProgramEx(e,hist))});
+  startWorkout({id:uid(),start:Date.now(),date:wdate(),type:'program',title:day.name+' (week '+(w+1)+')',pid:prog.id,w,d,notes:'',ex:day.ex.map(e=>fromProgramEx(e,hist,prog.weeks[w]))});
 }
 function startRandom(){
   const rz=S.ui.rz; if(!rz.plan) return; const hist=L.buildHist(S.sessions); const p=rz.plan;
@@ -58,15 +72,15 @@ function leastTrained(){
   S.sessions.filter(s=>s.date>=cut).forEach(s=>(s.ex||[]).forEach(e=>{ const t=tagOf[e.key]; if(!t) return; Object.keys(AREA).forEach(a=>{ if(AREA[a].includes(t)) cnt[a]+=(e.sets||[]).length; }); }));
   const min=Math.min(...Object.values(cnt)); const c=Object.keys(cnt).filter(k=>cnt[k]===min); return c[Math.floor(Math.random()*c.length)];
 }
-function rzGen(keepSeed){ const rz=S.ui.rz; if(!keepSeed) rz.seed=Math.floor(Math.random()*1e9)+1; rz.plan=L.generate({goal:rz.goal,focus:rz.focus,time:rz.time,seed:rz.seed,eq:S.profile.eq,wake:rz.wake}); }
+function rzGen(keepSeed){ const rz=S.ui.rz; rz.pick=null; if(!keepSeed) rz.seed=Math.floor(Math.random()*1e9)+1; rz.plan=L.generate({goal:rz.goal,focus:rz.focus,time:rz.time,seed:rz.seed,eq:S.profile.eq,wake:rz.wake}); }
 function planItemView(it,i,hist){
   const sug=suggestFor(it,hist); const reps=it.timed?it.hi+' sec':(it.lo===it.hi?it.lo:it.lo+' to '+it.hi);
   const last=(hist[it.key]||[])[0];
   return '<div class="li"><div class="grow">'+(it.ss?'<span class="ss">'+it.ss+'</span>':'')+'<span class="exn">'+esc(it.name)+'</span><div class="hint num">'+it.sets+' × '+reps+' · rest '+it.rest+'s'+(it.ss==='A'?' after the pair':'')+'</div>'+
-    (sug?'<div class="hint b num">Try '+fk(sug.kg)+' kg × '+sug.reps+'</div>':(it.timed?'':'<div class="hint">'+(last?'Last: '+fk(last.sets[0].kg)+' kg':'No history yet. Pick a weight that leaves about '+Math.round(10-it.rpe)+' reps spare.')+'</div>'))+'</div><button class="btn sm ghost" data-act="rzswap" data-i="'+i+'" aria-label="Swap '+esc(it.name)+'">Swap</button></div>';
+    (sug?'<div class="hint b num">Try '+fw(sug.kg)+' × '+sug.reps+'</div>':(it.timed?'':'<div class="hint">'+(last?'Last: '+fw(last.sets[0].kg)+'':'No history yet. Pick a weight that leaves about '+Math.round(10-it.rpe)+' reps spare.')+'</div>'))+'</div><div class="row" style="flex-wrap:nowrap;gap:4px"><button class="btn sm ghost" data-act="rzchoose" data-i="'+i+'" aria-label="Choose a replacement for '+esc(it.name)+'">Choose</button><button class="btn sm ghost" data-act="rzswap" data-i="'+i+'" aria-label="Swap '+esc(it.name)+'">Swap</button></div></div>'+(S.ui.rz.pick===i?'<div class="pickbox"><p class="tiny muted" style="margin:0">Replace '+esc(it.name)+' with:</p>'+groupBrowse('rz',S.ui.rz.pickGrp||L.GROUP_OF[it.tag],true)+'</div>':'');
 }
 function randomiserView(){
-  const rz=S.ui.rz; const hist=L.buildHist(S.sessions); const G=L.GOALS;
+  const rz=S.ui.rz; const hist=L.buildHist(S.sessions); buildExNames(hist); const G=L.GOALS;
   let h='<div class="card"><h2>Off the book</h2><p class="small muted" style="margin:4px 0 12px">Pick a goal, a focus and the time you have. Nothing here changes your program.</p>';
   h+='<span class="lbl">Goal</span><div class="chips" role="group" aria-label="Goal">'+Object.keys(G).map(k=>'<button class="chip" data-act="rzset" data-k="goal" data-v="'+k+'" aria-pressed="'+(rz.goal===k)+'">'+G[k].label+'</button>').join('')+'</div>';
   h+='<span class="lbl" style="margin-top:12px">Focus</span><div class="chips" role="group" aria-label="Focus">'+L.FOCUS.map(f=>'<button class="chip" data-act="rzset" data-k="focus" data-v="'+f[0]+'" aria-pressed="'+(rz.focus===f[0])+'">'+f[1]+'</button>').join('')+'</div>';
@@ -122,7 +136,7 @@ function warmupCard(a){
   if(S.ui.wuOpen){
     h+=items.map(i=>'<div class="wu"><button class="tick '+(a.wu.done[i.k]?'on':'')+'" data-act="wutick" data-k="'+esc(i.k)+'" aria-pressed="'+!!a.wu.done[i.k]+'" aria-label="Mark '+esc(i.n)+' done">'+TICK+'</button><div class="grow"><b>'+esc(i.n)+'</b><div class="hint">'+esc(i.dose)+'</div></div></div>').join('');
     const f=a.ex[0]; let kg=f&&f.sets[0]?+f.sets[0].kg:0; const ramp=L.rampFor(kg);
-    if(ramp) h+='<p class="small" style="margin-top:10px"><b>Optional ramp for '+esc(f.name)+':</b> '+ramp.map(r=>fk(r.kg)+' kg × '+r.reps).join(', ')+', then your working sets. Skip it if you are short on time.</p>';
+    if(ramp) h+='<p class="small" style="margin-top:10px"><b>Optional ramp for '+esc(f.name)+':</b> '+ramp.map(r=>fw(r.kg)+' × '+r.reps).join(', ')+', then your working sets. Skip it if you are short on time.</p>';
     h+='<p class="tiny muted" style="margin-top:8px">Dynamic moves, not long static holds, before lifting. Drills are picked from the exercises in this session.</p>';
   }
   return h+'</div>';
@@ -164,7 +178,7 @@ function viewTrain(){
   if(prog){ const ptr=S.profile.ptr; const wk0=prog.weeks[ptr.w]; const day=wk0&&wk0.days[ptr.d];
     h+='<div class="card"><div class="row between"><h2>Next up</h2><span class="tag">'+esc(prog.name)+'</span></div>';
     if(day){ h+='<p style="margin:4px 0 8px"><b>Week '+(ptr.w+1)+', day '+(ptr.d+1)+': '+esc(day.name)+'</b></p>'+(S.profile.wuOn===false?'':'<p class="small muted" style="margin-bottom:8px">Warm-up focus: '+esc(L.warmupAreas(day.ex.map(e=>e.key)).join(', ')||'whole body')+'</p>')+(ptr.done?'<p class="small muted" style="margin-bottom:6px">You reached the end of this program. Repeat the last day, load a new program, or train off the book.</p>':'')+
-      '<div>'+day.ex.map(e=>{ const hh=(hist0[e.key]||[])[0]; let kg=e.kg; if(hh&&(kg==null||hh.topKg>kg)) kg=hh.topKg; const rs0=e.rpe!=null?rpeSug(e,hist0):null; const wt=rs0?'RPE '+e.rpe+' · ~'+fk(rs0.kg)+' kg':kg!=null?fk(kg)+' kg'+(e.per?' '+e.per:''):(e.rpe!=null?(function(){ const rs=rpeSug(e,hist0); return 'RPE '+e.rpe+(rs?' · ~'+fk(rs.kg)+' kg':(hh?' · last '+fk(hh.topKg)+' kg':'')); })():(e.raw?esc(e.raw):'')); return '<div class="li" style="padding:6px 0"><span>'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+esc(e.name)+'</span><span class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+(wt?'<br><b>'+wt+'</b>':'')+'</span></div>'; }).join('')+'</div>'+
+      '<div>'+day.ex.map(e=>{ const hh=(hist0[e.key]||[])[0]; let kg=e.kg; if(hh&&(kg==null||hh.topKg>kg)) kg=hh.topKg; const pl0=pctLoad(e,wk0,hist0); const rs0=e.rpe!=null?rpeSug(e,hist0):null; const wt=pl0?e.pct+'% · '+fw(pl0.kg):rs0?'RPE '+e.rpe+' · ~'+fw(rs0.kg)+'':kg!=null?fw(kg)+''+(e.per?' '+e.per:''):(e.rpe!=null?(function(){ const rs=rpeSug(e,hist0); return 'RPE '+e.rpe+(rs?' · ~'+fw(rs.kg)+'':(hh?' · last '+fw(hh.topKg)+'':'')); })():(e.raw?esc(e.raw):'')); return '<div class="li" style="padding:6px 0"><span>'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+esc(e.name)+'</span><span class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+(wt?'<br><b>'+wt+'</b>':'')+'</span></div>'; }).join('')+'</div>'+
       '<div class="row" style="margin-top:12px"><button class="btn pri grow" data-act="startprog" data-w="'+ptr.w+'" data-d="'+ptr.d+'">Start</button><button class="btn" data-act="skipday">Skip day</button><button class="btn ghost" data-act="gotoplan">Change</button></div>'; }
     else h+='<p class="muted">This program has no sessions at this point.</p>';
     h+='</div>'; }
@@ -175,23 +189,23 @@ function viewTrain(){
   const yd=L.ymd(L.addDays(new Date(),-1));
   h+='<div class="card"><h3>Missed logging a session?</h3><p class="small muted" style="margin:4px 0 10px">Pick the date it happened, then choose what you did. It counts toward that week and your history.</p><label class="lbl" for="logd">Date</label><input type="date" id="logd" max="'+today()+'" value="'+yd+'"><div class="row" style="margin-top:10px">'+(prog?'<button class="btn" data-act="pastprog">Next program day</button>':'')+'<button class="btn" data-act="pastrz">Built session above</button><button class="btn" data-act="pastfree">Empty</button></div></div>';
   const rec=[...S.sessions].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.start||0)-(a.start||0)).slice(0,6);
-  if(rec.length){ h+='<div class="card"><h3>Recent</h3>'+rec.map(s=>'<div class="li"><div class="grow" data-act="opensess" data-id="'+esc(s.id)+'" style="cursor:pointer"><b>'+esc(s.title)+' <span class="chev" aria-hidden="true">›</span></b><div class="hint num">'+fdate(s.date)+' · '+(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0)+' sets · '+L.sessionVolume(s).toLocaleString('en-AU')+' kg moved</div></div>'+'<div class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-act="editsess" data-id="'+esc(s.id)+'">Edit</button>'+ask('ds'+s.id,'Delete','delSess',s.id)+'</div></div>').join('')+'</div>';
+  if(rec.length){ h+='<div class="card"><h3>Recent</h3>'+rec.map(s=>'<div class="li"><div class="grow" data-act="opensess" data-id="'+esc(s.id)+'" style="cursor:pointer"><b>'+esc(s.title)+' <span class="chev" aria-hidden="true">›</span></b><div class="hint num">'+fdate(s.date)+' · '+(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0)+' sets · '+fvol(L.sessionVolume(s))+' moved</div></div>'+'<div class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-act="editsess" data-id="'+esc(s.id)+'">Edit</button>'+ask('ds'+s.id,'Delete','delSess',s.id)+'</div></div>').join('')+'</div>';
     const prs=[]; rec.slice(0,4).forEach(s=>L.prsFor(s,S.sessions).filter(p=>p.type==='pr').forEach(p=>prs.push({d:s.date,p})));
-    if(prs.length) h+='<div class="card"><h3>Recent PRs</h3>'+prs.slice(0,6).map(x=>'<div class="li"><span><span class="tag y">PR</span> '+esc(x.p.name)+'</span><span class="num small muted">'+Math.round(x.p.e1)+' kg est. 1RM · '+fdate(x.d)+'</span></div>').join('')+'</div>'; }
+    if(prs.length) h+='<div class="card"><h3>Recent PRs</h3>'+prs.slice(0,6).map(x=>'<div class="li"><span><span class="tag y">PR</span> '+esc(x.p.name)+'</span><span class="num small muted">'+fw0(x.p.e1)+' est. 1RM · '+fdate(x.d)+'</span></div>').join('')+'</div>'; }
   return h;
 }
 /* ---------- workout view ---------- */
 function setRow(e,i,j){
-  const s=e.sets[j]; return '<div class="n">'+(j+1)+'</div><input inputmode="decimal" aria-label="Set '+(j+1)+' weight in kg" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="kg" value="'+esc(s.kg)+'" placeholder="kg"><input inputmode="numeric" aria-label="Set '+(j+1)+(e.target.timed?' seconds':' reps')+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="reps" value="'+esc(s.reps)+'" placeholder="'+esc(s.tr===''||s.tr==null?(e.target.timed?'sec':'reps'):s.tr)+'"><button class="tick '+(s.done?'on':'')+'" data-act="tick" data-i="'+i+'" data-j="'+j+'" aria-pressed="'+s.done+'" aria-label="Mark set '+(j+1)+' done">'+TICK+'</button>';
+  const s=e.sets[j]; return '<div class="n">'+(j+1)+'</div><input inputmode="decimal" aria-label="Set '+(j+1)+' weight in '+U()+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="kg" value="'+esc(dU(s.kg))+'" placeholder="'+U()+'"><input inputmode="numeric" aria-label="Set '+(j+1)+(e.target.timed?' seconds':' reps')+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="reps" value="'+esc(s.reps)+'" placeholder="'+esc(s.tr===''||s.tr==null?(e.target.timed?'sec':'reps'):s.tr)+'"><button class="tick '+(s.done?'on':'')+'" data-act="tick" data-i="'+i+'" data-j="'+j+'" aria-pressed="'+s.done+'" aria-label="Mark set '+(j+1)+' done">'+TICK+'</button>';
 }
 function exCard(e,i,hist){
   const t=e.target; const h=(hist[e.key]||[])[0];
   const meta=[t.repsText?t.sets+' × '+t.repsText:t.sets+' sets',t.rpe?('RPE '+t.rpe):'',t.rest?('rest '+t.rest+'s'):''].filter(Boolean).join(' · ');
   let x='<div class="ex '+(e.ss?'ssb':'')+'"><div class="row between"><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span></div>'+ask('rx'+e.id,'Remove','rmex',String(i))+'</div>';
   x+='<div class="hint num">'+esc(meta)+'</div>'+(t.raw?'<div class="hint">Sheet: '+esc(t.raw)+'</div>':'')+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'');
-  if(h) x+='<div class="hint num">Last: '+h.sets.map(s=>fk(s.kg)+'×'+s.reps).join(', ')+' · '+fdate(h.date)+'</div>';
-  if(e.sug) x+='<div class="hint b num">Try '+fk(e.sug.kg)+' kg × '+e.sug.reps+' <button class="btn sm ghost" data-act="usesug" data-i="'+i+'">Use</button></div><div class="hint">'+esc(e.sug.note)+'</div>';
-  x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">kg used</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
+  if(h) x+='<div class="hint num">Last: '+h.sets.map(s=>dU(s.kg)+'×'+s.reps).join(', ')+' · '+fdate(h.date)+'</div>';
+  if(e.sug) x+='<div class="hint b num">Try '+fw(e.sug.kg)+' × '+e.sug.reps+' <button class="btn sm ghost" data-act="usesug" data-i="'+i+'">Use</button></div><div class="hint">'+esc(e.sug.note)+'</div>';
+  x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">'+U()+' used</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
   e.sets.forEach((s,j)=>{ x+=setRow(e,i,j); }); x+='</div>';
   x+='<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="addset" data-i="'+i+'">+ Set</button><button class="btn sm ghost" data-act="rmset" data-i="'+i+'">− Set</button></div></div>';
   return x;
@@ -205,7 +219,7 @@ function viewWorkout(){
   h+='<div class="card"><label class="lbl" for="wdate">Date of this session</label><input type="date" id="wdate" data-in="wdate" max="'+today()+'" value="'+esc(a.date)+'">'+(a.past?'<p class="tiny muted" style="margin-top:6px">Logging for an earlier date. No timer or rest countdown.</p>':'')+'</div>';
   const rb=S.profile.rest; h+='<div class="row" style="margin-bottom:10px"><button class="chip" data-act="resttoggle" aria-pressed="'+rb+'">Rest timer '+(rb?'on':'off')+'</button><button class="chip" data-act="awaketoggle" aria-pressed="'+!!S.profile.awake+'">Screen '+(S.profile.awake?'stays on':'can sleep')+'</button></div>';
   h+=a.ex.map((e,i)=>exCard(e,i,hist)).join('');
-  const mine=Object.values(hist).map(x=>x[0].name); EXNAMES={mine:new Set(mine.map(n=>L.keyOf(n))),all:[...new Set(mine.concat(L.DB.map(e=>e.n)))]}; EXNAMES.txt={}; EXNAMES.all.forEach(n=>{ const t=L.tagFor(L.keyOf(n)); EXNAMES.txt[n]=(n+' '+(TAGWORDS[t]||'')).toLowerCase(); });
+  buildExNames(hist);
   h+='<div class="card" id="addcard"><label class="lbl" for="addex">Add an exercise</label><div class="row"><input class="grow" id="addex" data-in="addex" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Start typing a name" value="'+esc(S.ui.addEx)+'"><button class="btn" data-act="addex">Add</button></div><div id="exsug" class="exsug" role="listbox" aria-label="Matching exercises">'+exSugHTML(S.ui.addEx)+'</div></div>';
   h+='<div class="card"><label class="lbl" for="wnotes">Notes</label><textarea id="wnotes" data-in="wnotes" placeholder="How did it feel?">'+esc(a.notes)+'</textarea></div>';
   h+='<div class="row"><button class="btn pri grow" data-act="finish">Finish workout</button>'+ask('discardw','Discard','discardWork','')+'</div>';
@@ -214,9 +228,9 @@ function viewWorkout(){
 function viewSummary(){
   const x=S.ui.summary; const s=x.s; const now=new Date(); const wk=L.weekCounts(S.sessions,now,1)[0].count; const sets=s.ex.reduce((a,e)=>a+e.sets.length,0);
   const mins=Math.max(1,Math.round(s.dur/60)); const prs=x.prs.filter(p=>p.type==='pr'||p.type==='weight'); const base=x.prs.filter(p=>p.type==='baseline');
-  let h='<div class="top"><h2>Session logged</h2></div><div class="knurl" aria-hidden="true"></div><div class="card"><div class="kv"><div><b class="num">'+mins+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+L.sessionVolume(s).toLocaleString('en-AU')+'</b><span>kg moved</span></div></div></div>';
-  if(prs.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>New bests</h3>'+prs.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?Math.round(p.e1)+' kg est. 1RM (was '+Math.round(p.prev)+')':fk(p.kg)+' kg (was '+fk(p.prev)+')')+'</span></div>').join('')+'</div>';
-  if(base.length) h+='<div class="card"><h3>Baselines set</h3><p class="small muted">First time logging these. Future sessions get compared against them.</p>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+Math.round(p.e1)+' kg est. 1RM</span></div>').join('')+'</div>';
+  let h='<div class="top"><h2>Session logged</h2></div><div class="knurl" aria-hidden="true"></div><div class="card"><div class="kv"><div><b class="num">'+mins+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+fvol0(L.sessionVolume(s))+'</b><span>'+U()+' moved</span></div></div></div>';
+  if(prs.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>New bests</h3>'+prs.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?fw0(p.e1)+' est. 1RM (was '+Math.round(toU(p.prev))+')':fw(p.kg)+' (was '+dU(p.prev)+')')+'</span></div>').join('')+'</div>';
+  if(base.length) h+='<div class="card"><h3>Baselines set</h3><p class="small muted">First time logging these. Future sessions get compared against them.</p>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+fw0(p.e1)+' est. 1RM</span></div>').join('')+'</div>';
   h+=stretchCard(s);
   h+='<div class="card"><p><b>'+wk+' of '+S.profile.target+'</b> sessions this week. '+(wk>=S.profile.target?'Week target hit.':(S.profile.target-wk)+' to go.')+'</p></div>';
   h+='<button class="btn pri" style="width:100%" data-act="donesum">Done</button>';

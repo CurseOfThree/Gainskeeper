@@ -75,14 +75,21 @@ function addExercise(){
   const hist=L.buildHist(S.sessions); const pr=L.prettify(nm); const key=L.keyOf(nm); const db=L.DB.find(e=>L.keyOf(e.n)===key); const h=(hist[key]||[])[0];
   const it={name:db?db.n:pr.name,key,tag:db?db.t:'',eq:db?db.q:'bb',timed:db?!!db.timed:false,main:false,sets:3,lo:8,hi:12,rest:90,rpe:8,ss:null};
   const e=fromPlanItem(it,hist); e.target.repsText='8 to 12'; if(!e.sug&&h) e.sets.forEach(s=>{ s.kg=h.topKg; });
-  S.active.ex.push(e); S.ui.addEx=''; saveActive(); render();
+  S.active.ex.push(e); S.ui.addEx=''; S.ui.addNew=false; S.ui.addGrp=null; saveActive(); render();
+}
+function guessProgName(){
+  const im=S.ui.imp; const lines=String(im.rawText||im.text||'').split(/\n/).map(x=>x.trim()).filter(Boolean).slice(0,6);
+  for(const l of lines){ const m=l.match(/^(?:program(?:me)?|plan|title|name)\s*[:\-]\s*(.{2,50})$/i); if(m) return m[1].trim(); }
+  const f=String(im.fileName||'').replace(/\.[a-z0-9]+$/i,'').replace(/[_]+/g,' ').replace(/\s+/g,' ').trim();
+  if(f&&!/^(img|pxl|dsc|photo|screenshot|scan|image|document|file|download)\b[\s\-]*[\d\s\-]*$/i.test(f)&&!/^[\d\s\-]+$/.test(f)) return f.slice(0,50);
+  return '';
 }
 function exCount(r){ return r&&r.prog?r.prog.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.ex.length,0),0):0; }
 function autoParse(){
-  const im=S.ui.imp; im.res=null; if(!im.text||!im.text.trim()) return; let r=null, via='';
+  const im=S.ui.imp; im.res=null; if(!im.text||!im.text.trim()) return; let r=null, via=''; im.rawText=im.text;
   if(im.items&&im.items.length){ const g=L.parseGrid(im.items); if(g.rows>=3){ const rr=L.parseCSV(g.csv); if(exCount(rr)>0){ r=rr; im.text=g.csv; const wn=[...new Set(rr.prog.weeks.map((w,i)=>i+1))]; rr.prog.weeks.forEach((w,i)=>{ const m=g.rmByWeek[i+1]; if(m) w.rm=Object.assign({},m); }); via='Read as a table: '+g.weeks+' weeks, '+g.days+' days a week. Check it below.'; } } }
   if(!r){ const rr=L.parseAny(im.text); if(exCount(rr)>0) r=rr; }
-  if(r){ im.res=r; im.res.name=r.prog.name; im.err=''; if(via) im.note=(im.note?im.note+'. ':'')+via; }
+  if(r){ im.res=r; const g=(!r.prog.name||/^imported program$/i.test(r.prog.name))?guessProgName():''; if(g) r.prog.name=g; im.res.name=r.prog.name; im.err=''; if(via) im.note=(im.note?im.note+'. ':'')+via; }
   else im.err=(im.err?im.err+' ':'')+'I could not recognise a program layout in that text. '+(apiKey()?'Tap Ask Claude to read it, or edit the text and tap Read it.':'You can edit the text and tap Read it, or add a Claude key in Plan, Settings so Ask Claude can read messy files.');
 }
 const CLAUDE_MODEL='claude-sonnet-5-5';
@@ -176,6 +183,22 @@ const H={
   usesug:el=>{ const e=S.active.ex[+el.dataset.i]; e.sets.forEach(s=>{ if(!s.done) s.kg=e.sug.kg; }); saveActive(); render(); },
   addex:()=>addExercise(),
   exsug:el=>{ S.ui.addEx=el.dataset.v; addExercise(); },
+  addgrp:el=>{ S.ui.addGrp=S.ui.addGrp===el.dataset.v?null:el.dataset.v; const b=$('#exsug'); if(b) b.innerHTML=exSugHTML(S.ui.addEx); },
+  addpick:el=>{ S.ui.addEx=el.dataset.v; addExercise(); },
+  addnew:()=>{ S.ui.addNew=true; const b=$('#exsug'); if(b) b.innerHTML=exSugHTML(S.ui.addEx); },
+  addnewsave:()=>{ const n=String(S.ui.addEx||'').trim(); if(!n) return; const t=($('#nxt')||{}).value||'hpush', q=($('#nxq')||{}).value||'bw'; const nm=L.prettify(n).name;
+    S.profile.customEx=(S.profile.customEx||[]).filter(c=>L.keyOf(c.n)!==L.keyOf(nm)).concat({n:nm,t,q}); L.setCustomEx(S.profile.customEx); saveProfile(); addExercise(); toast('Saved to your exercises.'); },
+  rzchoose:el=>{ const rz=S.ui.rz; const i=+el.dataset.i; rz.pick=rz.pick===i?null:i; rz.pickGrp=null; render(); },
+  rzgrp:el=>{ S.ui.rz.pickGrp=el.dataset.v; render(); },
+  rzpick:el=>{ const rz=S.ui.rz; if(rz.pick==null) return; rz.plan=L.replaceItem(rz.plan,rz.pick,el.dataset.v); rz.pick=null; render(); },
+  cxadd:()=>{ const n=(($('#cxn')||{}).value||'').trim(); if(!n){ toast('Type a name first.'); return; } const nm=L.prettify(n).name; const t=$('#cxt').value, q=$('#cxq').value;
+    if(L.DB.some(e=>!e.cu&&L.keyOf(e.n)===L.keyOf(nm))){ toast(nm+' is already in the list.'); return; }
+    S.profile.customEx=(S.profile.customEx||[]).filter(c=>L.keyOf(c.n)!==L.keyOf(nm)).concat({n:nm,t,q}); L.setCustomEx(S.profile.customEx); saveProfile(); toast('Added '+nm+'.'); render(); },
+  cxdel:el=>{ S.profile.customEx=(S.profile.customEx||[]).filter(c=>c.n!==el.dataset.v); L.setCustomEx(S.profile.customEx); saveProfile(); render(); },
+  renameprog:el=>{ S.ui.renaming=el.dataset.id; render(); const i=$('#pgname'); if(i){ i.focus(); i.select(); } },
+  cancelrename:()=>{ S.ui.renaming=null; render(); },
+  saveprogname:el=>{ const p=S.programs.find(x=>x.id===el.dataset.id); const v=(($('#pgname')||{}).value||'').trim(); if(p&&v){ p.name=v.slice(0,60); saveProgram(p); toast('Renamed.'); } S.ui.renaming=null; render(); },
+  setunit:el=>{ S.profile.unit=el.dataset.v==='lb'?'lb':'kg'; saveProfile(); render(); },
   awaketoggle:()=>{ S.profile.awake=!S.profile.awake; saveProfile(); render(); },
   backupnow:async()=>{ await autoBackup(true); const b=bkInfo(); toast(b.err?'Backup failed: '+b.err:'Backed up to '+b.file); render(); },
   resttoggle:()=>{ S.profile.rest=!S.profile.rest; if(!S.profile.rest) S.rest=null; saveProfile(); render(); },
@@ -223,9 +246,10 @@ document.addEventListener('focusin',ev=>{ if(ev.target&&ev.target.id==='addex') 
 document.addEventListener('click',ev=>{ const el=ev.target.closest('[data-act]'); if(!el) return; if(el.tagName==='A') ev.preventDefault(); const f=H[el.dataset.act]; if(f) f(el,ev); });
 function readFileText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result)); r.onerror=()=>rej(r.error); r.readAsText(file); }); }
 const IN={
+  rm1:(el,ph)=>{ if(ph!=='change') return; const k=el.dataset.k; S.profile.rm1=S.profile.rm1||{}; const v=fromU(el.value); if(v===''||!(+v>0)){ delete S.profile.rm1[k]; } else S.profile.rm1[k]={kg:+v,d:today(),name:el.dataset.n}; saveProfile(); toast(v===''?'Cleared.':'Saved your 1RM.'); render(); },
   apikey:(el,ph)=>{ if(ph!=='change') return; const v=el.value.trim(); if(!v) return; try{ localStorage.setItem(LS_KEY_API,v); toast('Key saved on this phone.'); }catch(e){ toast('Could not save the key.'); } render(); },
   setname:(el)=>{ S.profile.name=el.value.trim().slice(0,30); saveProfile(); },
-  addex:(el,ph)=>{ if(ph==='change'||!el.isConnected) return; S.ui.addEx=el.value; const box=$('#exsug'); if(box) box.innerHTML=exSugHTML(el.value); },
+  addex:(el,ph)=>{ if(ph==='change'||!el.isConnected) return; S.ui.addEx=el.value; S.ui.addNew=false; const box=$('#exsug'); if(box) box.innerHTML=exSugHTML(el.value); },
   wdate:(el,ph)=>{ if(ph!=='change'||!S.active) return; let v=el.value; if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) return; if(v>today()) v=today(); S.active.date=v; S.active.past=!!S.active.editing||v!==today(); if(S.active.past) S.rest=null; saveActive(); render(); },
   cdmin:el=>{ S.ui.cd.min=el.value; },
   cddate:el=>{ S.ui.cd.date=el.value; },
@@ -264,8 +288,8 @@ const IN={
   libnote:(el)=>{ S.profile.libNotes[el.dataset.id]=el.value; saveProfile(); }
 };
 document.addEventListener('input',ev=>{ const el=ev.target;
-  if(el.dataset&&el.dataset.set){ const e=S.active&&S.active.ex[+el.dataset.i]; if(e){ const j=+el.dataset.j,f=el.dataset.f; const old=e.sets[j][f]; e.sets[j][f]=el.value;
-      if(f==='kg'){ for(let k=j+1;k<e.sets.length;k++){ const o=e.sets[k]; if(!o.done&&String(o.kg)===String(old)){ o.kg=el.value; const inp=document.querySelector('[data-set][data-i="'+el.dataset.i+'"][data-j="'+k+'"][data-f="kg"]'); if(inp) inp.value=el.value; } else break; } }
+  if(el.dataset&&el.dataset.set){ const e=S.active&&S.active.ex[+el.dataset.i]; if(e){ const j=+el.dataset.j,f=el.dataset.f; const old=e.sets[j][f]; const nv=f==='kg'?fromU(el.value):el.value; e.sets[j][f]=nv;
+      if(f==='kg'){ for(let k=j+1;k<e.sets.length;k++){ const o=e.sets[k]; if(!o.done&&String(o.kg)===String(old)){ o.kg=nv; const inp=document.querySelector('[data-set][data-i="'+el.dataset.i+'"][data-j="'+k+'"][data-f="kg"]'); if(inp) inp.value=el.value; } else break; } }
       saveActiveSoon(); } return; }
   const f=el.dataset&&el.dataset.in; if(f==='fuel'||f==='cdmin'||f==='cddate'||f==='ms'||f==='libnote'||f==='addex'||f==='wnotes'||f==='imptext'||f==='impname') IN[f](el,'input'); });
 document.addEventListener('change',ev=>{ const el=ev.target; const f=el.dataset&&el.dataset.in; if(f&&IN[f]) IN[f](el,'change'); });
