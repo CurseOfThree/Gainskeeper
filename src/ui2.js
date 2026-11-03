@@ -30,21 +30,21 @@ function suggestFor(it,hist){
   if(it.timed) return null; const h=hist[it.key]; if(!h||!h.length) return null;
   const step=L.stepFor(it.eq||'bb'); const last=h[0];
   const inRange=last.sets.every(s=>s.reps>=it.lo-2&&s.reps<=it.hi+2);
-  if(inRange&&S.profile.prog){ const p=L.progress(last.sets,it.lo,it.hi,step); if(p) return {kg:roundU(p.kg,step),reps:p.reps,note:p.note}; }
+  if(inRange&&S.profile.prog){ const p=L.progress(last.sets,it.lo,it.hi,step); if(p) return {kg:roundU(p.kg,step,it.key),reps:p.reps,note:p.note}; }
   const e=Math.max(...h.slice(0,3).map(x=>x.e1)); const kg=L.sugLoad(e,it.hi,it.rpe||8,step); if(!kg) return null;
-  return {kg:roundU(kg,step),reps:it.hi,note:'From your best recent estimate ('+fw0(e)+' for one rep), leaving about '+Math.round(10-(it.rpe||8))+' reps in reserve.'};
+  return {kg:roundU(kg,step,it.key),reps:it.hi,note:'From your best recent estimate ('+fw0(e,it.key)+' for one rep), leaving about '+Math.round(10-(it.rpe||8))+' reps in reserve.'};
 }
 function rpeSug(pe,hist){
   if(pe.rpe==null||pe.timed||!(pe.reps>0)) return null; const h=hist[pe.key]; if(!h||!h.length) return null;
   const recent=h.slice(0,4).filter(x=>x.e1>0); if(!recent.length) return null; const e=Math.max(...recent.map(x=>x.e1));
   const step=stepGuess(pe.key); const kg=L.sugLoad(e,pe.reps,pe.rpe,step); if(!kg) return null;
-  return {kg:roundU(kg,step),reps:pe.reps,note:'RPE '+pe.rpe+' for '+pe.reps+' is about '+Math.round(L.rpePct(pe.reps,pe.rpe))+'% of your estimated max ('+fw0(e)+', from your last '+recent.length+' session'+(recent.length>1?'s':'')+'). A starting point from the RPE chart: adjust on the first set.'};
+  return {kg:roundU(kg,step,pe.key),reps:pe.reps,note:'RPE '+pe.rpe+' for '+pe.reps+' is about '+Math.round(L.rpePct(pe.reps,pe.rpe))+'% of your estimated max ('+fw0(e,pe.key)+', from your last '+recent.length+' session'+(recent.length>1?'s':'')+'). A starting point from the RPE chart: adjust on the first set.'};
 }
 function fromProgramEx(pe,hist,wk){
   const h=(hist[pe.key]||[])[0]; let kg=pe.kg; if(h&&(kg==null||h.topKg>kg)) kg=h.topKg; const pl=pctLoad(pe,wk,hist); if(pl) kg=pl.kg;
   const sets=[]; for(let i=0;i<pe.sets;i++){ const tr=pe.repsList?pe.repsList[i]:pe.reps; sets.push({kg:kg==null?'':kg,reps:'',done:false,tr:tr==null?'':tr}); }
   const heavy=(pe.reps||10)<=6;
-  return {id:uid(),name:pe.name,key:pe.key,ss:pe.ss,note:pe.note||'',target:{sets:pe.sets,repsText:pe.repsText,lo:pe.reps,hi:pe.reps,rpe:pe.rpe,raw:pe.raw,per:pe.per,timed:pe.timed,rest:heavy?150:90},sets,sug:pl?{kg:pl.kg,reps:pe.reps,note:pe.pct+'% of your '+pl.src.replace(/ 1RM$/,'')+' 1RM ('+fw(pl.base)+').'}:rpeSug(pe,hist)};
+  return {id:uid(),name:pe.name,key:pe.key,ss:pe.ss,note:pe.note||'',target:{sets:pe.sets,repsText:pe.repsText,lo:pe.reps,hi:pe.reps,rpe:pe.rpe,raw:pe.raw,per:pe.per,timed:pe.timed,rest:heavy?150:90},sets,sug:pl?{kg:pl.kg,reps:pe.reps,note:pe.pct+'% of your '+pl.src.replace(/ 1RM$/,'')+' 1RM ('+fw(pl.base,pe.key)+').'}:rpeSug(pe,hist)};
 }
 function fromPlanItem(it,hist){
   const sug=suggestFor(it,hist); const sets=[]; for(let i=0;i<it.sets;i++) sets.push({kg:sug?sug.kg:'',reps:'',done:false,tr:it.hi});
@@ -77,7 +77,7 @@ function planItemView(it,i,hist){
   const sug=suggestFor(it,hist); const reps=it.timed?it.hi+' sec':(it.lo===it.hi?it.lo:it.lo+' to '+it.hi);
   const last=(hist[it.key]||[])[0];
   return '<div class="li"><div class="grow">'+(it.ss?'<span class="ss">'+it.ss+'</span>':'')+'<span class="exn">'+esc(it.name)+'</span><div class="hint num">'+it.sets+' × '+reps+' · rest '+it.rest+'s'+(it.ss==='A'?' after the pair':'')+'</div>'+
-    (sug?'<div class="hint b num">Try '+fw(sug.kg)+' × '+sug.reps+'</div>':(it.timed?'':'<div class="hint">'+(last?'Last: '+fw(last.sets[0].kg)+'':'No history yet. Pick a weight that leaves about '+Math.round(10-it.rpe)+' reps spare.')+'</div>'))+'</div><div class="row" style="flex-wrap:nowrap;gap:4px"><button class="btn sm ghost" data-act="rzchoose" data-i="'+i+'" aria-label="Choose a replacement for '+esc(it.name)+'">Choose</button><button class="btn sm ghost" data-act="rzswap" data-i="'+i+'" aria-label="Swap '+esc(it.name)+'">Swap</button></div></div>'+(S.ui.rz.pick===i?'<div class="pickbox"><p class="tiny muted" style="margin:0">Replace '+esc(it.name)+' with:</p>'+groupBrowse('rz',S.ui.rz.pickGrp||L.GROUP_OF[it.tag],true)+'</div>':'');
+    (sug?'<div class="hint b num">Try '+fw(sug.kg,it.key)+' × '+sug.reps+'</div>':(it.timed?'':'<div class="hint">'+(last?'Last: '+fw(last.sets[0].kg,it.key)+'':'No history yet. Pick a weight that leaves about '+Math.round(10-it.rpe)+' reps spare.')+'</div>'))+'</div><div class="row" style="flex-wrap:nowrap;gap:4px"><button class="btn sm ghost" data-act="rzchoose" data-i="'+i+'" aria-label="Choose a replacement for '+esc(it.name)+'">Choose</button><button class="btn sm ghost" data-act="rzswap" data-i="'+i+'" aria-label="Swap '+esc(it.name)+'">Swap</button></div></div>'+(S.ui.rz.pick===i?'<div class="pickbox"><p class="tiny muted" style="margin:0">Replace '+esc(it.name)+' with:</p>'+groupBrowse('rz',S.ui.rz.pickGrp||L.GROUP_OF[it.tag],true)+'</div>':'');
 }
 function randomiserView(){
   const rz=S.ui.rz; const hist=L.buildHist(S.sessions); buildExNames(hist); const G=L.GOALS;
@@ -136,7 +136,7 @@ function warmupCard(a){
   if(S.ui.wuOpen){
     h+=items.map(i=>'<div class="wu"><button class="tick '+(a.wu.done[i.k]?'on':'')+'" data-act="wutick" data-k="'+esc(i.k)+'" aria-pressed="'+!!a.wu.done[i.k]+'" aria-label="Mark '+esc(i.n)+' done">'+TICK+'</button><div class="grow"><b>'+esc(i.n)+'</b><div class="hint">'+esc(i.dose)+'</div></div></div>').join('');
     const f=a.ex[0]; let kg=f&&f.sets[0]?+f.sets[0].kg:0; const ramp=L.rampFor(kg);
-    if(ramp) h+='<p class="small" style="margin-top:10px"><b>Optional ramp for '+esc(f.name)+':</b> '+ramp.map(r=>fw(r.kg)+' × '+r.reps).join(', ')+', then your working sets. Skip it if you are short on time.</p>';
+    if(ramp) h+='<p class="small" style="margin-top:10px"><b>Optional ramp for '+esc(f.name)+':</b> '+ramp.map(r=>fw(r.kg,f.key)+' × '+r.reps).join(', ')+', then your working sets. Skip it if you are short on time.</p>';
     h+='<p class="tiny muted" style="margin-top:8px">Dynamic moves, not long static holds, before lifting. Drills are picked from the exercises in this session.</p>';
   }
   return h+'</div>';
@@ -178,7 +178,7 @@ function viewTrain(){
   if(prog){ const ptr=S.profile.ptr; const wk0=prog.weeks[ptr.w]; const day=wk0&&wk0.days[ptr.d];
     h+='<div class="card"><div class="row between"><h2>Next up</h2><span class="tag">'+esc(prog.name)+'</span></div>';
     if(day){ h+='<p style="margin:4px 0 8px"><b>Week '+(ptr.w+1)+', day '+(ptr.d+1)+': '+esc(day.name)+'</b></p>'+(S.profile.wuOn===false?'':'<p class="small muted" style="margin-bottom:8px">Warm-up focus: '+esc(L.warmupAreas(day.ex.map(e=>e.key)).join(', ')||'whole body')+'</p>')+(ptr.done?'<p class="small muted" style="margin-bottom:6px">You reached the end of this program. Repeat the last day, load a new program, or train off the book.</p>':'')+
-      '<div>'+day.ex.map(e=>{ const hh=(hist0[e.key]||[])[0]; let kg=e.kg; if(hh&&(kg==null||hh.topKg>kg)) kg=hh.topKg; const pl0=pctLoad(e,wk0,hist0); const rs0=e.rpe!=null?rpeSug(e,hist0):null; const wt=pl0?e.pct+'% · '+fw(pl0.kg):rs0?'RPE '+e.rpe+' · ~'+fw(rs0.kg)+'':kg!=null?fw(kg)+''+(e.per?' '+e.per:''):(e.rpe!=null?(function(){ const rs=rpeSug(e,hist0); return 'RPE '+e.rpe+(rs?' · ~'+fw(rs.kg)+'':(hh?' · last '+fw(hh.topKg)+'':'')); })():(e.raw?esc(e.raw):'')); return '<div class="li" style="padding:6px 0"><span>'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+esc(e.name)+'</span><span class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+(wt?'<br><b>'+wt+'</b>':'')+'</span></div>'; }).join('')+'</div>'+
+      '<div>'+day.ex.map(e=>{ const hh=(hist0[e.key]||[])[0]; let kg=e.kg; if(hh&&(kg==null||hh.topKg>kg)) kg=hh.topKg; const pl0=pctLoad(e,wk0,hist0); const rs0=e.rpe!=null?rpeSug(e,hist0):null; const wt=pl0?e.pct+'% · '+fw(pl0.kg,e.key):rs0?'RPE '+e.rpe+' · ~'+fw(rs0.kg,e.key)+'':kg!=null?fw(kg,e.key)+''+(e.per?' '+e.per:''):(e.rpe!=null?(function(){ const rs=rpeSug(e,hist0); return 'RPE '+e.rpe+(rs?' · ~'+fw(rs.kg,e.key)+'':(hh?' · last '+fw(hh.topKg,e.key)+'':'')); })():(e.raw?esc(e.raw):'')); return '<div class="li" style="padding:6px 0"><span>'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+esc(e.name)+'</span><span class="num small" style="text-align:right">'+e.sets+' × '+esc(e.repsText)+(wt?'<br><b>'+wt+'</b>':'')+'</span></div>'; }).join('')+'</div>'+
       '<div class="row" style="margin-top:12px"><button class="btn pri grow" data-act="startprog" data-w="'+ptr.w+'" data-d="'+ptr.d+'">Start</button><button class="btn" data-act="skipday">Skip day</button><button class="btn ghost" data-act="gotoplan">Change</button></div>'; }
     else h+='<p class="muted">This program has no sessions at this point.</p>';
     h+='</div>'; }
@@ -191,21 +191,22 @@ function viewTrain(){
   const rec=[...S.sessions].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.start||0)-(a.start||0)).slice(0,6);
   if(rec.length){ h+='<div class="card"><h3>Recent</h3>'+rec.map(s=>'<div class="li"><div class="grow" data-act="opensess" data-id="'+esc(s.id)+'" style="cursor:pointer"><b>'+esc(s.title)+' <span class="chev" aria-hidden="true">›</span></b><div class="hint num">'+fdate(s.date)+' · '+(s.ex||[]).reduce((a,e)=>a+(e.sets||[]).length,0)+' sets · '+fvol(L.sessionVolume(s))+' moved</div></div>'+'<div class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-act="editsess" data-id="'+esc(s.id)+'">Edit</button>'+ask('ds'+s.id,'Delete','delSess',s.id)+'</div></div>').join('')+'</div>';
     const prs=[]; rec.slice(0,4).forEach(s=>L.prsFor(s,S.sessions).filter(p=>p.type==='pr').forEach(p=>prs.push({d:s.date,p})));
-    if(prs.length) h+='<div class="card"><h3>Recent PRs</h3>'+prs.slice(0,6).map(x=>'<div class="li"><span><span class="tag y">PR</span> '+esc(x.p.name)+'</span><span class="num small muted">'+fw0(x.p.e1)+' est. 1RM · '+fdate(x.d)+'</span></div>').join('')+'</div>'; }
+    if(prs.length) h+='<div class="card"><h3>Recent PRs</h3>'+prs.slice(0,6).map(x=>'<div class="li"><span><span class="tag y">PR</span> '+esc(x.p.name)+'</span><span class="num small muted">'+fw0(x.p.e1,x.p.key)+' est. 1RM · '+fdate(x.d)+'</span></div>').join('')+'</div>'; }
   return h;
 }
 /* ---------- workout view ---------- */
 function setRow(e,i,j){
-  const s=e.sets[j]; return '<div class="n">'+(j+1)+'</div><input inputmode="decimal" aria-label="Set '+(j+1)+' weight in '+U()+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="kg" value="'+esc(dU(s.kg))+'" placeholder="'+U()+'"><input inputmode="numeric" aria-label="Set '+(j+1)+(e.target.timed?' seconds':' reps')+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="reps" value="'+esc(s.reps)+'" placeholder="'+esc(s.tr===''||s.tr==null?(e.target.timed?'sec':'reps'):s.tr)+'"><button class="tick '+(s.done?'on':'')+'" data-act="tick" data-i="'+i+'" data-j="'+j+'" aria-pressed="'+s.done+'" aria-label="Mark set '+(j+1)+' done">'+TICK+'</button>';
+  const s=e.sets[j]; return '<div class="n">'+(j+1)+'</div><input inputmode="decimal" aria-label="Set '+(j+1)+' weight in '+U(e.key)+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="kg" value="'+esc(dU(s.kg,e.key))+'" placeholder="'+U(e.key)+'"><input inputmode="numeric" aria-label="Set '+(j+1)+(e.target.timed?' seconds':' reps')+'" data-set="1" data-i="'+i+'" data-j="'+j+'" data-f="reps" value="'+esc(s.reps)+'" placeholder="'+esc(s.tr===''||s.tr==null?(e.target.timed?'sec':'reps'):s.tr)+'"><button class="tick '+(s.done?'on':'')+'" data-act="tick" data-i="'+i+'" data-j="'+j+'" aria-pressed="'+s.done+'" aria-label="Mark set '+(j+1)+' done">'+TICK+'</button>';
 }
+function unitSw(key,name){ const u=U(key); return '<div class="unitsw" role="group" aria-label="Weight units for '+esc(name)+'">'+['kg','lb'].map(x=>'<button type="button" data-act="unitex" data-k="'+esc(key)+'" data-v="'+x+'" aria-pressed="'+(u===x)+'">'+x+'</button>').join('')+'</div>'; }
 function exCard(e,i,hist){
   const t=e.target; const h=(hist[e.key]||[])[0];
   const meta=[t.repsText?t.sets+' × '+t.repsText:t.sets+' sets',t.rpe?('RPE '+t.rpe):'',t.rest?('rest '+t.rest+'s'):''].filter(Boolean).join(' · ');
-  let x='<div class="ex '+(e.ss?'ssb':'')+'"><div class="row between"><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span></div>'+ask('rx'+e.id,'Remove','rmex',String(i))+'</div>';
+  let x='<div class="ex '+(e.ss?'ssb':'')+'"><div class="row between"><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span></div>'+(e.target&&e.target.timed?'':unitSw(e.key,e.name))+ask('rx'+e.id,'Remove','rmex',String(i))+'</div>';
   x+='<div class="hint num">'+esc(meta)+'</div>'+(t.raw?'<div class="hint">Sheet: '+esc(t.raw)+'</div>':'')+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'');
-  if(h) x+='<div class="hint num">Last: '+h.sets.map(s=>dU(s.kg)+'×'+s.reps).join(', ')+' · '+fdate(h.date)+'</div>';
-  if(e.sug) x+='<div class="hint b num">Try '+fw(e.sug.kg)+' × '+e.sug.reps+' <button class="btn sm ghost" data-act="usesug" data-i="'+i+'">Use</button></div><div class="hint">'+esc(e.sug.note)+'</div>';
-  x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">'+U()+' used</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
+  if(h) x+='<div class="hint num">Last: '+h.sets.map(s=>dU(s.kg,e.key)+'×'+s.reps).join(', ')+' · '+fdate(h.date)+'</div>';
+  if(e.sug) x+='<div class="hint b num">Try '+fw(e.sug.kg,e.key)+' × '+e.sug.reps+' <button class="btn sm ghost" data-act="usesug" data-i="'+i+'">Use</button></div><div class="hint">'+esc(e.sug.note)+'</div>';
+  x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">'+U(e.key)+' used</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
   e.sets.forEach((s,j)=>{ x+=setRow(e,i,j); }); x+='</div>';
   x+='<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="addset" data-i="'+i+'">+ Set</button><button class="btn sm ghost" data-act="rmset" data-i="'+i+'">− Set</button></div></div>';
   return x;
@@ -228,9 +229,9 @@ function viewWorkout(){
 function viewSummary(){
   const x=S.ui.summary; const s=x.s; const now=new Date(); const wk=L.weekCounts(S.sessions,now,1)[0].count; const sets=s.ex.reduce((a,e)=>a+e.sets.length,0);
   const mins=Math.max(1,Math.round(s.dur/60)); const prs=x.prs.filter(p=>p.type==='pr'||p.type==='weight'); const base=x.prs.filter(p=>p.type==='baseline');
-  let h='<div class="top"><h2>Session logged</h2></div><div class="knurl" aria-hidden="true"></div><div class="card"><div class="kv"><div><b class="num">'+mins+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+fvol0(L.sessionVolume(s))+'</b><span>'+U()+' moved</span></div></div></div>';
-  if(prs.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>New bests</h3>'+prs.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?fw0(p.e1)+' est. 1RM (was '+Math.round(toU(p.prev))+')':fw(p.kg)+' (was '+dU(p.prev)+')')+'</span></div>').join('')+'</div>';
-  if(base.length) h+='<div class="card"><h3>Baselines set</h3><p class="small muted">First time logging these. Future sessions get compared against them.</p>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+fw0(p.e1)+' est. 1RM</span></div>').join('')+'</div>';
+  let h='<div class="top"><h2>Session logged</h2></div><div class="knurl" aria-hidden="true"></div><div class="card"><div class="kv"><div><b class="num">'+mins+'</b><span>minutes</span></div><div><b class="num">'+sets+'</b><span>sets</span></div><div><b class="num">'+fvol0(L.sessionVolume(s))+'</b><span>kg moved</span></div></div></div>';
+  if(prs.length) h+='<div class="card" style="border-color:var(--yellow)"><h3>New bests</h3>'+prs.map(p=>'<div class="li"><span><span class="tag y">'+(p.type==='pr'?'PR':'Heaviest')+'</span> '+esc(p.name)+'</span><span class="num small">'+(p.type==='pr'?fw0(p.e1,p.key)+' est. 1RM (was '+Math.round(toU(p.prev,p.key))+')':fw(p.kg,p.key)+' (was '+dU(p.prev,p.key)+')')+'</span></div>').join('')+'</div>';
+  if(base.length) h+='<div class="card"><h3>Baselines set</h3><p class="small muted">First time logging these. Future sessions get compared against them.</p>'+base.map(p=>'<div class="li"><span>'+esc(p.name)+'</span><span class="num small muted">'+fw0(p.e1,p.key)+' est. 1RM</span></div>').join('')+'</div>';
   h+=stretchCard(s);
   h+='<div class="card"><p><b>'+wk+' of '+S.profile.target+'</b> sessions this week. '+(wk>=S.profile.target?'Week target hit.':(S.profile.target-wk)+' to go.')+'</p></div>';
   h+='<button class="btn pri" style="width:100%" data-act="donesum">Done</button>';
