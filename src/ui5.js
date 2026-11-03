@@ -74,7 +74,7 @@ function addExercise(){
   const nm=(S.ui.addEx||'').trim(); if(!nm){ toast('Type an exercise name first.'); return; }
   const hist=L.buildHist(S.sessions); const pr=L.prettify(nm); const key=L.keyOf(nm); const db=L.DB.find(e=>L.keyOf(e.n)===key); const h=(hist[key]||[])[0];
   const it={name:db?db.n:pr.name,key,tag:db?db.t:'',eq:db?db.q:'bb',timed:db?!!db.timed:false,main:false,sets:3,lo:8,hi:12,rest:90,rpe:8,ss:null};
-  const e=fromPlanItem(it,hist); e.target.repsText='8 to 12'; if(!e.sug&&h) e.sets.forEach(s=>{ s.kg=h.topKg; });
+  if(it.timed){ it.lo=it.hi=40; it.rpe=null; } const e=fromPlanItem(it,hist); if(!it.timed) e.target.repsText='8 to 12'; if(!e.sug&&h) e.sets.forEach(s=>{ s.kg=h.topKg; });
   S.active.ex.push(e); S.ui.addEx=''; S.ui.addNew=false; S.ui.addGrp=null; saveActive(); render();
 }
 function guessProgName(){
@@ -182,6 +182,7 @@ const H={
   rmset:el=>{ const e=S.active.ex[+el.dataset.i]; if(e.sets.length>1){ e.sets.pop(); saveActive(); render(); } },
   usesug:el=>{ const e=S.active.ex[+el.dataset.i]; e.sets.forEach(s=>{ if(!s.done) s.kg=e.sug.kg; }); saveActive(); render(); },
   addex:()=>addExercise(),
+  exmove:el=>{ const i=+el.dataset.i; exMove(i,i+(+el.dataset.v)); },
   exsug:el=>{ S.ui.addEx=el.dataset.v; addExercise(); },
   addgrp:el=>{ S.ui.addGrp=S.ui.addGrp===el.dataset.v?null:el.dataset.v; const b=$('#exsug'); if(b) b.innerHTML=exSugHTML(S.ui.addEx); },
   addpick:el=>{ S.ui.addEx=el.dataset.v; addExercise(); },
@@ -241,6 +242,28 @@ const H={
   libaddtoggle:()=>{ S.ui.libAdd=!S.ui.libAdd; render(); },
   libaddsave:()=>{ const t=($('#lt')||{}).value||''; if(!t.trim()){ toast('Add a title.'); return; } const u=(($('#lu')||{}).value||'').trim(); S.profile.customLib.push({id:'c'+uid(),title:t.trim(),url:/^https?:\/\//i.test(u)?u:'',note:(($('#ln')||{}).value||'').trim()}); S.ui.libAdd=false; S.ui.lib='mine'; saveProfile(); render(); }
 };
+/* ---------- drag to reorder exercises ---------- */
+let DRAG=null;
+function exMove(from,to){ const ex=S.active&&S.active.ex; if(!ex||to<0||to>=ex.length||from===to) return; const [m]=ex.splice(from,1); ex.splice(to,0,m); saveActive(); render(); }
+document.addEventListener('pointerdown',ev=>{ const hd=ev.target.closest&&ev.target.closest('[data-drag]'); if(!hd||!S.active) return; ev.preventDefault();
+  const list=[...document.querySelectorAll('#app .ex[data-exi]')]; const card=hd.closest('.ex'); const from=list.indexOf(card); if(from<0) return;
+  const sy=window.scrollY; const rects=list.map(c=>{ const r=c.getBoundingClientRect(); return {top:r.top+sy,h:r.height}; });
+  const gap=list.length>1?Math.max(0,rects[1].top-(rects[0].top+rects[0].h)):10;
+  DRAG={card,list,rects,from,to:from,startY:ev.clientY,sy,y:ev.clientY,gap,raf:0};
+  try{ hd.setPointerCapture(ev.pointerId); }catch(e){}
+  card.classList.add('dragging'); list.forEach(c=>{ if(c!==card) c.classList.add('shifting'); });
+  try{ navigator.vibrate&&navigator.vibrate(15); }catch(e){}
+  const loop=()=>{ if(!DRAG) return; const y=DRAG.y, H=window.innerHeight; if(y<90) window.scrollBy(0,-Math.ceil((90-y)/6)); else if(y>H-110) window.scrollBy(0,Math.ceil((y-(H-110))/6)); dragUpdate(); DRAG.raf=requestAnimationFrame(loop); }; DRAG.raf=requestAnimationFrame(loop);
+},{passive:false});
+function dragUpdate(){ const d=DRAG; const dy=d.y-d.startY+(window.scrollY-d.sy); d.card.style.transform='translateY('+dy+'px)';
+  const r0=d.rects[d.from]; const mid=r0.top+r0.h/2+dy; let to=d.from;
+  for(let k=0;k<d.rects.length;k++){ if(k===d.from) continue; const m=d.rects[k].top+d.rects[k].h/2; if(k<d.from&&mid<m) { to=Math.min(to,k); } if(k>d.from&&mid>m) to=Math.max(to,k); }
+  d.to=to; const sh=r0.h+d.gap;
+  d.list.forEach((c,k)=>{ if(k===d.from) return; let t=0; if(d.from<to&&k>d.from&&k<=to) t=-sh; else if(to<d.from&&k>=to&&k<d.from) t=sh; c.style.transform=t?'translateY('+t+'px)':''; });
+}
+document.addEventListener('pointermove',ev=>{ if(!DRAG) return; ev.preventDefault(); DRAG.y=ev.clientY; },{passive:false});
+function dragEnd(){ if(!DRAG) return; const d=DRAG; DRAG=null; cancelAnimationFrame(d.raf); d.list.forEach(c=>{ c.style.transform=''; c.classList.remove('dragging','shifting'); }); if(d.to!==d.from) exMove(d.from,d.to); }
+document.addEventListener('pointerup',dragEnd); document.addEventListener('pointercancel',dragEnd);
 document.addEventListener('keydown',ev=>{ if(ev.key==='Enter'&&ev.target&&ev.target.id==='addex'){ ev.preventDefault(); addExercise(); } });
 document.addEventListener('focusin',ev=>{ if(ev.target&&ev.target.id==='addex') setTimeout(()=>{ try{ ev.target.scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){} },350); });
 document.addEventListener('click',ev=>{ const el=ev.target.closest('[data-act]'); if(!el) return; if(el.tagName==='A') ev.preventDefault(); const f=H[el.dataset.act]; if(f) f(el,ev); });

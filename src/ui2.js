@@ -202,13 +202,13 @@ function unitSw(key,name){ const u=U(key); return '<div class="unitsw" role="gro
 function exCard(e,i,hist){
   const t=e.target; const h=(hist[e.key]||[])[0];
   const meta=[t.repsText?t.sets+' × '+t.repsText:t.sets+' sets',t.rpe?('RPE '+t.rpe):'',t.rest?('rest '+t.rest+'s'):''].filter(Boolean).join(' · ');
-  let x='<div class="ex '+(e.ss?'ssb':'')+'"><div class="row between"><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span></div>'+(e.target&&e.target.timed?'':unitSw(e.key,e.name))+ask('rx'+e.id,'Remove','rmex',String(i))+'</div>';
+  let x='<div class="ex '+(e.ss?'ssb':'')+'" data-exi="'+i+'"><div class="row between"><button type="button" class="drag" data-drag="'+i+'" aria-label="Drag to reorder '+esc(e.name)+'" title="Drag to reorder"><svg viewBox="0 0 12 20" aria-hidden="true"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg></button><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span></div>'+(e.target&&e.target.timed?'':unitSw(e.key,e.name))+ask('rx'+e.id,'Remove','rmex',String(i))+'</div>';
   x+='<div class="hint num">'+esc(meta)+'</div>'+(t.raw?'<div class="hint">Sheet: '+esc(t.raw)+'</div>':'')+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'');
   if(h) x+='<div class="hint num">Last: '+h.sets.map(s=>dU(s.kg,e.key)+'×'+s.reps).join(', ')+' · '+fdate(h.date)+'</div>';
   if(e.sug) x+='<div class="hint b num">Try '+fw(e.sug.kg,e.key)+' × '+e.sug.reps+' <button class="btn sm ghost" data-act="usesug" data-i="'+i+'">Use</button></div><div class="hint">'+esc(e.sug.note)+'</div>';
   x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">'+U(e.key)+' used</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
   e.sets.forEach((s,j)=>{ x+=setRow(e,i,j); }); x+='</div>';
-  x+='<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="addset" data-i="'+i+'">+ Set</button><button class="btn sm ghost" data-act="rmset" data-i="'+i+'">− Set</button></div></div>';
+  x+='<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="addset" data-i="'+i+'">+ Set</button><button class="btn sm ghost" data-act="rmset" data-i="'+i+'">− Set</button><span class="grow"></span><button class="btn sm ghost" data-act="exmove" data-i="'+i+'" data-v="-1" aria-label="Move '+esc(e.name)+' up"'+(i===0?' disabled':'')+'>↑</button><button class="btn sm ghost" data-act="exmove" data-i="'+i+'" data-v="1" aria-label="Move '+esc(e.name)+' down"'+(i===S.active.ex.length-1?' disabled':'')+'>↓</button></div></div>';
   return x;
 }
 function viewWorkout(){
