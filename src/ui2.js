@@ -211,6 +211,16 @@ function exCard(e,i,hist){
   x+='<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="addset" data-i="'+i+'">+ Set</button><button class="btn sm ghost" data-act="rmset" data-i="'+i+'">− Set</button><span class="grow"></span><button class="btn sm ghost" data-act="exmove" data-i="'+i+'" data-v="-1" aria-label="Move '+esc(e.name)+' up"'+(i===0?' disabled':'')+'>↑</button><button class="btn sm ghost" data-act="exmove" data-i="'+i+'" data-v="1" aria-label="Move '+esc(e.name)+' down"'+(i===S.active.ex.length-1?' disabled':'')+'>↓</button></div></div>';
   return x;
 }
+function nextSet(a){ a=a||S.active; if(!a) return null; for(let i=0;i<a.ex.length;i++){ const e=a.ex[i]; for(let j=0;j<e.sets.length;j++) if(!e.sets[j].done) return {i,j,e,s:e.sets[j]}; } return null; }
+function setKgGuess(e,j){ const s=e.sets[j]; if(s.kg!==''&&s.kg!=null&&!isNaN(s.kg)) return +s.kg; for(let k=j-1;k>=0;k--){ const v=e.sets[k].kg; if(v!==''&&v!=null&&!isNaN(v)) return +v; } if(e.sug&&e.sug.kg) return e.sug.kg; return null; }
+function setRepsGuess(s){ const v=s.reps!==''&&s.reps!=null?s.reps:(s.tr||''); return v; }
+function nextBar(){ const a=S.active; if(!a||a.past) return ''; const n=nextSet(); if(!n) return '<div class="nextbar done"><span class="small">Every set is ticked. Finish when you are ready.</span></div>';
+  const e=n.e, t=e.target||{}; const kg=setKgGuess(e,n.j); const reps=setRepsGuess(n.s);
+  return '<div class="nextbar" id="nextbar"><div class="nb-top"><b>'+esc(e.name)+'</b><span class="tiny muted num">Set '+(n.j+1)+' of '+e.sets.length+'</span></div><div class="nb-row">'+
+    (t.timed?'':'<div class="step" role="group" aria-label="Weight"><button type="button" data-act="nbstep" data-f="kg" data-v="-1" aria-label="Less weight">−</button><span class="num"><b>'+(kg==null?'–':dU(kg,e.key))+'</b><small>'+U(e.key)+'</small></span><button type="button" data-act="nbstep" data-f="kg" data-v="1" aria-label="More weight">+</button></div>')+
+    '<div class="step" role="group" aria-label="'+(t.timed?'Seconds':'Reps')+'"><button type="button" data-act="nbstep" data-f="reps" data-v="-1" aria-label="Fewer">−</button><span class="num"><b>'+(reps===''?'–':esc(reps))+'</b><small>'+(t.timed?'sec':'reps')+'</small></span><button type="button" data-act="nbstep" data-f="reps" data-v="1" aria-label="More">+</button></div>'+
+    '<button type="button" class="btn pri nb-done" data-act="nbdone">Done set</button></div></div>';
+}
 function viewWorkout(){
   const a=S.active; const hist=L.buildHist(S.sessions); const done=a.ex.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0);
   let h='<div class="top"><div class="grow"><h2>'+(a.editing?'Editing: ':'')+esc(a.title)+'</h2><div class="small muted num">'+(a.past?'':'<span id="elapsed"></span> · ')+done+' sets done</div></div><button class="btn sm" data-act="leave">Back</button></div>';
@@ -218,12 +228,13 @@ function viewWorkout(){
   h+=warmupCard(a);
   if(a.wake){ h+='<div class="notice" style="margin-bottom:10px"><b>Wake-up flow first:</b> '+L.WAKE.map(esc).join('. ')+'.</div>'; }
   h+='<div class="card"><label class="lbl" for="wdate">Date of this session</label><input type="date" id="wdate" data-in="wdate" max="'+today()+'" value="'+esc(a.date)+'">'+(a.past?'<p class="tiny muted" style="margin-top:6px">Logging for an earlier date. No timer or rest countdown.</p>':'')+'</div>';
-  const rb=S.profile.rest; h+='<div class="row" style="margin-bottom:10px"><button class="chip" data-act="resttoggle" aria-pressed="'+rb+'">Rest timer '+(rb?'on':'off')+'</button><button class="chip" data-act="awaketoggle" aria-pressed="'+!!S.profile.awake+'">Screen '+(S.profile.awake?'stays on':'can sleep')+'</button></div>';
+  const rb=S.profile.rest; h+='<div class="row" style="margin-bottom:10px"><button class="chip" data-act="resttoggle" aria-pressed="'+rb+'">Rest timer '+(rb?'on':'off')+'</button><button class="chip" data-act="awaketoggle" aria-pressed="'+!!S.profile.awake+'">Screen '+(S.profile.awake?'stays on':'can sleep')+'</button>'+(window.GK_NATIVE&&GK_NATIVE()?'<button class="chip" data-act="wnotiftoggle" aria-pressed="'+(S.profile.wnotif!==false)+'">Lock screen controls '+(S.profile.wnotif!==false?'on':'off')+'</button>':'')+'</div>';
   h+=a.ex.map((e,i)=>exCard(e,i,hist)).join('');
   buildExNames(hist);
   h+='<div class="card" id="addcard"><label class="lbl" for="addex">Add an exercise</label><div class="row"><input class="grow" id="addex" data-in="addex" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Start typing a name" value="'+esc(S.ui.addEx)+'"><button class="btn" data-act="addex">Add</button></div><div id="exsug" class="exsug" role="listbox" aria-label="Matching exercises">'+exSugHTML(S.ui.addEx)+'</div></div>';
   h+='<div class="card"><label class="lbl" for="wnotes">Notes</label><textarea id="wnotes" data-in="wnotes" placeholder="How did it feel?">'+esc(a.notes)+'</textarea></div>';
   h+='<div class="row"><button class="btn pri grow" data-act="finish">Finish workout</button>'+ask('discardw','Discard','discardWork','')+'</div>';
+  h+=nextBar();
   return h;
 }
 function viewSummary(){

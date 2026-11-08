@@ -26,8 +26,16 @@ const cp=(src,dst)=>{ for(const e of fs.readdirSync(src,{withFileTypes:true})){ 
 const resDst='android/app/src/main/res';
 if(fs.existsSync('resources/android/res')) cp('resources/android/res',resDst);
 if(fs.existsSync('resources/splash.png')){ const walk=d=>{ for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); if(e.isDirectory()) walk(p); else if(e.name==='splash.png') fs.copyFileSync('resources/splash.png',p); } }; walk(resDst); }
+// Watch support: phone bridge plugin + Wear OS module
+const pkgDir='android/app/src/main/java/com/curseofthree/gainskeeper';
+if(fs.existsSync('native/phone')){ for(const f of fs.readdirSync('native/phone')) fs.copyFileSync(path.join('native/phone',f),path.join(pkgDir,f)); }
+let ag=fs.readFileSync(f,'utf8'); if(!ag.includes('play-services-wearable')){ ag=ag.replace(/dependencies \{/,'dependencies {\n    implementation "com.google.android.gms:play-services-wearable:20.0.1"'); fs.writeFileSync(f,ag); }
+if(fs.existsSync('native/wear')){ fs.rmSync('android/wear',{recursive:true,force:true}); fs.mkdirSync('android/wear',{recursive:true}); cp('native/wear','android/wear');
+  const wres='android/wear/src/main/res'; fs.mkdirSync(wres,{recursive:true}); if(fs.existsSync('resources/android/res')) cp('resources/android/res',wres);
+  let st=fs.readFileSync('android/settings.gradle','utf8'); if(!st.includes("':wear'")) fs.writeFileSync('android/settings.gradle',st.replace("include ':app'","include ':app'\ninclude ':wear'")); }
 // versionCode from CI run number so each build installs over the last
 const code=process.env.GITHUB_RUN_NUMBER||'1';
 g=fs.readFileSync(f,'utf8').replace(/versionCode \d+/,'versionCode '+code).replace(/versionName "[^"]*"/,'versionName "1.0.'+code+'"');
 fs.writeFileSync(f,g);
+const wf='android/wear/build.gradle'; if(fs.existsSync(wf)) fs.writeFileSync(wf,fs.readFileSync(wf,'utf8').replace(/versionCode \d+/,'versionCode '+code).replace(/versionName "[^"]*"/,'versionName "1.0.'+code+'"'));
 console.log('patched',f,'versionCode',code);

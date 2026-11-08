@@ -12,7 +12,7 @@ function render(){
     tb.innerHTML='<div class="tabs" role="tablist">'+TABS.map(t=>'<button class="tab" role="tab" data-act="tab" data-v="'+t[0]+'"'+(S.tab===t[0]?' aria-current="page" aria-selected="true"':' aria-selected="false"')+'>'+ICON[t[0]]+t[1]+'</button>').join('')+'</div>';
   }
   if(window.GK_AWAKE) GK_AWAKE.set(!!(S.ui.inWorkout&&S.active&&S.profile.awake));
-  app.innerHTML=h; decorateCards(); window.scrollTo(0,y); tickClock();
+  app.innerHTML=h; decorateCards(); syncOutside(); window.scrollTo(0,y); tickClock();
 }
 function cardKey(c){ const t=c.querySelector('h2,h3,.lbl'); return t?S.tab+':'+(S.tab==='plan'?S.ui.planTab+':':'')+t.textContent.trim().slice(0,40):null; }
 function decorateCards(){
@@ -41,6 +41,7 @@ async function autoBackup(force){
 function backupAgeDays(){ const b=bkInfo(); const t=Math.max(b.auto||0,b.manual||0); return t?Math.floor((Date.now()-t)/864e5):null; }
 function restBody(){ const a=S.active; if(!a) return ''; for(const e of a.ex){ if(e.sets.some(s=>!s.done)) return 'Next: '+e.name; } return 'Rest over.'; }
 function tickClock(){
+  document.body.classList.toggle('resting',!!(S.rest&&!$('#restbar').hidden));
   if(window.GK_REST) GK_REST.sync(S.rest&&!S.rest.fired?S.rest.end:0,restBody());
   const el=$('#elapsed'); if(el&&S.active){ const s=Math.max(0,Math.floor((Date.now()-S.active.start)/1000)); el.textContent=Math.floor(s/3600)?Math.floor(s/3600)+':'+pad2(Math.floor(s%3600/60))+':'+pad2(s%60):pad2(Math.floor(s/60))+':'+pad2(s%60); }
   const rb=$('#restbar'); if(!S.rest||!S.ui.inWorkout){ rb.hidden=true; return; }
@@ -48,6 +49,26 @@ function tickClock(){
   if(left<=0){ if(!S.rest.fired){ S.rest.fired=true; try{ navigator.vibrate&&navigator.vibrate([200,100,200]); }catch(e){} if(t) t.textContent='Go'; const l=$('#rl'); if(l) l.textContent='Rest over'; S.rest.doneAt=Date.now(); } if(S.rest.doneAt&&Date.now()-S.rest.doneAt>6000){ S.rest=null; rb.hidden=true; } return; }
   if(t) t.textContent=Math.floor(left/60)+':'+pad2(left%60);
 }
+function outsideState(){ const a=S.active; if(!a||a.past||a.editing) return {active:false,t:Date.now()};
+  let done=0,total=0; a.ex.forEach(e=>e.sets.forEach(s=>{ total++; if(s.done) done++; })); const n=nextSet(a); let cur=null;
+  if(n){ const e=n.e,t=e.target||{}; const kg=setKgGuess(e,n.j); cur={i:n.i,j:n.j,name:e.name,setNo:n.j+1,sets:e.sets.length,kg:(kg==null||t.timed)?'':dU(kg,e.key),unit:U(e.key),step:U(e.key)==='lb'?5:stepGuess(e.key),reps:String(setRepsGuess(n.s)||''),timed:!!t.timed}; }
+  return {active:true,title:a.title,cur,restEnd:S.rest&&!S.rest.fired?S.rest.end:0,done,total,t:Date.now()}; }
+let SYNC_T=0;
+function syncOutside(now){ clearTimeout(SYNC_T); SYNC_T=setTimeout(()=>{ const st=outsideState();
+  if(window.GK_WEAR) GK_WEAR.send(st);
+  if(window.GK_WORKOUT){ if(st.active&&S.profile.wnotif!==false){ const c=st.cur; const rest=st.restEnd?'Resting until '+new Date(st.restEnd).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit'})+'. ':''; GK_WORKOUT.show(!st.total?'Workout started':c?c.name+' · set '+c.setNo+' of '+c.sets:'All sets done',!st.total?'Add exercises in the app.':rest+(c?(c.kg!==''?c.kg+' '+c.unit+' × ':'')+(c.reps||'?')+(c.timed?' sec':' reps'):'Finish in the app when ready.')+' · '+st.done+'/'+st.total+' sets'); } else GK_WORKOUT.clear(); }
+},now?0:250); }
+function handleRemote(m){ const a=S.active; if(!m) return; if(m.a==='hello'){ if(window.GK_WEAR) GK_WEAR.last=''; syncOutside(true); return; } if(!a||a.past) return;
+  if(m.a==='done'){ let i=m.i,j=m.j; const n=nextSet(a); if(i==null||!a.ex[i]||!a.ex[i].sets[j]||a.ex[i].sets[j].done){ if(!n) return; i=n.i; j=n.j; }
+    const e=a.ex[i], s=e.sets[j]; if(m.kg!=null&&m.kg!==''&&!isNaN(m.kg)) s.kg=fromU(m.kg,e.key); if(m.reps!=null&&m.reps!=='') s.reps=String(m.reps); completeSet(i,j); return; }
+  if(m.a==='plus30'||m.a==='rest'){ if(S.rest){ S.rest.end+=30000; S.rest.fired=false; S.rest.doneAt=0; tickClock(); syncOutside(true); } return; }
+  if(m.a==='skip'){ S.rest=null; tickClock(); syncOutside(true); return; }
+  if(m.a==='hr'&&+m.bpm>30&&+m.bpm<240){ a.hr=a.hr||[]; a.hr.push([Date.now(),Math.round(+m.bpm)]); if(a.hr.length>3000) a.hr.shift(); try{ lsSet(LS_ACTIVE,a); }catch(e){} return; }
+}
+function completeSet(i,j,already){ const a=S.active; if(!a) return; const e=a.ex[i]; if(!e) return; const s=e.sets[j]; if(!s) return;
+  if(s.kg===''||s.kg==null){ const g=setKgGuess(e,j); if(g!=null&&!(e.target&&e.target.timed)) s.kg=g; }
+  if(s.reps===''&&s.tr!=='') s.reps=s.tr; s.done=true; if(!already) try{ navigator.vibrate&&navigator.vibrate(20); }catch(x){}
+  startRest(e.target.rest||90); saveActive(); render(); syncOutside(true); }
 function startRest(sec){
   if(!S.profile.rest||(S.active&&S.active.past)) return; S.rest={end:Date.now()+sec*1000,total:sec,fired:false};
   const rb=$('#restbar'); rb.innerHTML='<div class="in"><span id="rl" class="small">Rest</span><span class="t num" id="rt"></span><span class="grow"></span><button class="btn sm" data-act="rest30">+30s</button><button class="btn sm" data-act="restskip">Skip</button></div>'; rb.hidden=false; tickClock();
@@ -65,7 +86,7 @@ const DO={
 function finishWorkout(){
   const a=S.active; const ex=a.ex.map(e=>({name:e.name,key:e.key,note:e.note||'',sets:e.sets.filter(s=>s.done).map(s=>({kg:+s.kg||0,reps:+s.reps||+s.tr||0,done:true}))})).filter(e=>e.sets.length);
   if(!ex.length){ toast('Tick at least one set before finishing.'); return; }
-  const s={id:a.id,date:a.date,start:a.start,dur:a.editing?(a.dur||0):a.past?0:Math.round((Date.now()-a.start)/1000),type:a.type,title:a.title,pid:a.pid||null,w:a.w==null?null:a.w,d:a.d==null?null:a.d,goal:a.goal||null,focus:a.focus||null,notes:a.notes||'',ex};
+  const s={id:a.id,date:a.date,start:a.start,dur:a.editing?(a.dur||0):a.past?0:Math.round((Date.now()-a.start)/1000),type:a.type,title:a.title,pid:a.pid||null,w:a.w==null?null:a.w,d:a.d==null?null:a.d,goal:a.goal||null,focus:a.focus||null,notes:a.notes||'',ex}; if(a.hr&&a.hr.length>=3){ const v=a.hr.map(x=>x[1]); s.hr={avg:Math.round(v.reduce((p,q)=>p+q,0)/v.length),max:Math.max(...v),n:v.length}; } else if(a.editing&&a.hrSaved) s.hr=a.hrSaved;
   saveSession(s); autoBackup(true);
   if(!a.editing&&a.type==='program'&&a.pid===S.profile.activePid){ const prog=activeProg(); if(prog){ S.profile.ptr=L.advance(prog,{w:a.w,d:a.d}); saveProfile(); } }
   const prs=L.prsFor(s,S.sessions); S.ui.summary={s,prs}; S.active=null; lsDel(LS_ACTIVE); S.ui.inWorkout=false; S.rest=null; window.scrollTo(0,0); render();
@@ -162,7 +183,7 @@ const H={
   msdel:el=>{ S.profile.meas=S.profile.meas.filter(x=>x.id!==el.dataset.id); saveProfile(); render(); },
   editsess:el=>{ const s=S.sessions.find(x=>x.id===el.dataset.id); if(!s) return;
     if(S.active){ toast('Finish or discard your workout in progress first.'); return; }
-    const a={id:s.id,date:s.date,start:s.start,dur:s.dur,type:s.type,title:s.title,pid:s.pid,w:s.w,d:s.d,goal:s.goal,focus:s.focus,notes:s.notes||'',past:true,editing:true,
+    const a={id:s.id,date:s.date,start:s.start,dur:s.dur,type:s.type,title:s.title,pid:s.pid,w:s.w,d:s.d,goal:s.goal,focus:s.focus,notes:s.notes||'',past:true,editing:true,hrSaved:s.hr||null,
       ex:(s.ex||[]).map(e=>({id:uid(),name:e.name,key:e.key,ss:null,note:e.note||'',target:{sets:e.sets.length,repsText:'',lo:null,hi:null,rpe:null,raw:'',per:'',timed:false,rest:90},sets:e.sets.map(x=>({kg:x.kg||'',reps:x.reps,done:true,tr:''})),sug:null}))};
     S.active=a; S.ui.inWorkout=true; S.ui.summary=null; saveActive(); window.scrollTo(0,0); render(); },
   pastprog:()=>{ if(!setPast()) return; const p=S.profile.ptr; startProgram(p.w,p.d); },
@@ -177,7 +198,14 @@ const H={
   rzswap:el=>{ const rz=S.ui.rz; rz.seed=(rz.seed||1)+1; rz.plan=L.swapItem(rz.plan,+el.dataset.i,rz.seed,S.profile.eq); render(); },
   rzstart:()=>startRandom(),
   tick:el=>{ const i=+el.dataset.i,j=+el.dataset.j; const e=S.active.ex[i]; const s=e.sets[j]; s.done=!s.done;
-    if(s.done){ if(s.reps===''&&s.tr!=='') s.reps=s.tr; startRest(e.target.rest||90); } saveActive(); render(); },
+    if(s.done){ completeSet(i,j,true); return; } saveActive(); render(); },
+  nbdone:()=>{ const n=nextSet(); if(!n) return; completeSet(n.i,n.j); },
+  nbstep:el=>{ const n=nextSet(); if(!n) return; const e=n.e, s=n.s, d=+el.dataset.v;
+    if(el.dataset.f==='kg'){ let kg=setKgGuess(e,n.j); const lb=U(e.key)==='lb'; const st=lb?5:stepGuess(e.key);
+      if(kg==null) kg=lb?fromU(45,e.key):20; else { const cur=toU(kg,e.key); kg=fromU(Math.max(0,Math.round((cur+d*st)/st)*st),e.key); }
+      const old=s.kg; s.kg=Math.max(0,kg); for(let k=n.j+1;k<e.sets.length;k++){ const o=e.sets[k]; if(!o.done&&(String(o.kg)===String(old)||o.kg==='')) o.kg=s.kg; } }
+    else { const cur=parseInt(setRepsGuess(s),10); s.reps=String(Math.max(0,(isNaN(cur)?0:cur)+d)); }
+    saveActive(); render(); },
   addset:el=>{ const e=S.active.ex[+el.dataset.i]; const l=e.sets[e.sets.length-1]||{kg:'',tr:''}; e.sets.push({kg:l.kg,reps:'',done:false,tr:l.tr}); saveActive(); render(); },
   rmset:el=>{ const e=S.active.ex[+el.dataset.i]; if(e.sets.length>1){ e.sets.pop(); saveActive(); render(); } },
   usesug:el=>{ const e=S.active.ex[+el.dataset.i]; e.sets.forEach(s=>{ if(!s.done) s.kg=e.sug.kg; }); saveActive(); render(); },
@@ -200,11 +228,12 @@ const H={
   cancelrename:()=>{ S.ui.renaming=null; render(); },
   saveprogname:el=>{ const p=S.programs.find(x=>x.id===el.dataset.id); const v=(($('#pgname')||{}).value||'').trim(); if(p&&v){ p.name=v.slice(0,60); saveProgram(p); toast('Renamed.'); } S.ui.renaming=null; render(); },
   unitex:el=>{ const k=el.dataset.k; S.profile.unitEx=S.profile.unitEx||{}; if(el.dataset.v==='lb') S.profile.unitEx[k]='lb'; else delete S.profile.unitEx[k]; saveProfile(); render(); },
+  wnotiftoggle:()=>{ S.profile.wnotif=S.profile.wnotif===false; saveProfile(); render(); },
   awaketoggle:()=>{ S.profile.awake=!S.profile.awake; saveProfile(); render(); },
   backupnow:async()=>{ await autoBackup(true); const b=bkInfo(); toast(b.err?'Backup failed: '+b.err:'Backed up to '+b.file); render(); },
   resttoggle:()=>{ S.profile.rest=!S.profile.rest; if(!S.profile.rest) S.rest=null; saveProfile(); render(); },
-  rest30:()=>{ if(S.rest){ S.rest.end+=30000; S.rest.fired=false; S.rest.doneAt=0; tickClock(); } },
-  restskip:()=>{ S.rest=null; tickClock(); },
+  rest30:()=>{ if(S.rest){ S.rest.end+=30000; S.rest.fired=false; S.rest.doneAt=0; tickClock(); syncOutside(true); } },
+  restskip:()=>{ S.rest=null; tickClock(); syncOutside(true); },
   finish:()=>finishWorkout(),
   donesum:()=>{ S.ui.summary=null; S.tab='train'; window.scrollTo(0,0); render(); },
   plantab:el=>{ S.ui.planTab=el.dataset.v; render(); },
@@ -320,5 +349,6 @@ setInterval(tickClock,500);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) tickClock(); });
 /* ---------- init ---------- */
 loadLocal(); if(S.active) S.ui.inWorkout=false; render(); connect();
+if(window.GK_WORKOUT) GK_WORKOUT.init(handleRemote); if(window.GK_WEAR) GK_WEAR.on(handleRemote); syncOutside(true);
 setTimeout(()=>{ const b=bkInfo(); if(!b.auto||Date.now()-b.auto>7*864e5) autoBackup(true); },3000);
 })();

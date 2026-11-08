@@ -28,6 +28,12 @@ Plan > Add program reads Excel, CSV, JSON, text and PDF files on the phone (libr
 
 Photos and scanned PDFs are read on the phone with Google ML Kit (@capacitor-mlkit/text-recognition), Android app only. The OCR text is rows rebuilt from line positions, so layouts with columns come out as spaced text.
 
+## Galaxy Watch (Wear OS) app
+`native/wear` is a small Java watch app; `native/phone/WearBridgePlugin.java` links it to the phone app over the Wear OS Data Layer.
+`scripts/patch-android.js` copies both into the generated Android project, and CI publishes `gainskeeper-watch.apk` next to the phone APK.
+Both apps share the package name and signing key, which Wear OS requires for them to talk.
+Install the watch APK by wireless ADB (watch Developer options > Wireless debugging), from a computer or an installer app on the phone.
+
 ## Not carried over from the Artifact version
 Cloud saving and "Ask Claude to read it" depended on running inside Claude. Add programs by pasting CSV, JSON or the short text format, or ask Claude in chat to convert a sheet and paste the result.
 

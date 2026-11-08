@@ -64,3 +64,20 @@ window.GK_BACKUP={
       for(const n of names.slice(0,Math.max(0,names.length-8))){ try{ await FS.deleteFile({path:'Gainskeeper/'+n,directory:'DOCUMENTS'}); }catch(e){} } }catch(e){}
     return 'Documents/Gainskeeper/'+name; }
 };
+// Ongoing workout notification with quick actions (lock screen, mirrored to a watch).
+window.GK_WORKOUT={ reg:false, last:'',
+  async init(handler){ if(!GK_NATIVE()||this.reg) return; const LN=GK_PLUGIN('LocalNotifications');
+    try{ await LN.registerActionTypes({types:[{id:'gkset',actions:[{id:'done',title:'Done set'},{id:'plus30',title:'+30s'},{id:'skip',title:'Skip rest'}]}]});
+      await LN.createChannel({id:'workout',name:'Workout in progress',description:'Current set with Done set, +30s and Skip rest buttons',importance:2,visibility:1,vibration:false});
+      LN.addListener('localNotificationActionPerformed',ev=>{ try{ if(ev&&ev.notification&&ev.notification.id===7002&&ev.actionId&&ev.actionId!=='tap') handler({a:ev.actionId}); }catch(e){} });
+      this.reg=true; }catch(e){ console.warn('workout notify',e); } },
+  async show(title,body){ if(!GK_NATIVE()) return; const key=title+'|'+body; if(key===this.last) return; this.last=key; if(!(await GK_REST.init())) return; const LN=GK_PLUGIN('LocalNotifications');
+    try{ await LN.schedule({notifications:[{id:7002,title,body,channelId:'workout',ongoing:true,autoCancel:false,actionTypeId:'gkset'}]}); }catch(e){ console.warn('workout show',e); } },
+  async clear(){ if(!GK_NATIVE()||!this.last) return; this.last=''; try{ await GK_PLUGIN('LocalNotifications').cancel({notifications:[{id:7002}]}); }catch(e){} }
+};
+// Bridge to the Gainskeeper Wear OS app (Galaxy Watch). Quietly does nothing without a watch.
+window.GK_WEAR={ ok:GK_NATIVE(), last:'',
+  async send(state){ if(!this.ok) return; const j=JSON.stringify(state); const k=j.replace(/"t":\d+/,''); if(k===this.last) return; this.last=k; try{ await GK_PLUGIN('WearBridge').sendState({json:j}); }catch(e){ } },
+  on(fn){ if(!this.ok) return; try{ GK_PLUGIN('WearBridge').addListener('action',ev=>{ try{ fn(ev); }catch(e){} }); }catch(e){ this.ok=false; } },
+  async status(){ if(!this.ok) return {nodes:0}; try{ return await GK_PLUGIN('WearBridge').status(); }catch(e){ return {nodes:0,error:String(e&&e.message||e)}; } }
+};
