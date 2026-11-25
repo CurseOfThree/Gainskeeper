@@ -1,6 +1,6 @@
 /* ---------- render ---------- */
 const TABS=[['train','Train'],['plan','Plan'],['progress','Progress'],['fuel','Fuel'],['library','Library']];
-function header(){ return '<div class="top"><div class="brand">'+plateLogo()+'<span>Gainskeeper<small>Strength and shape, kept.</small></span></div><div class="sync" id="sync" aria-live="polite">'+esc(syncText())+'</div></div><div class="knurl" aria-hidden="true"></div>'; }
+function header(){ return '<div class="top"><div class="brand">'+plateLogo()+'<span>Gainskeeper</span></div><div class="sync" id="sync" aria-live="polite">'+esc(syncText())+'</div></div>'+quoteHTML()+'<div class="knurl" aria-hidden="true"></div>'; }
 function render(){
   const y=window.scrollY; const app=$('#app'); const tb=$('#tabbar'); let h;
   if(!S.profile.setup){ h=viewSetup(); tb.hidden=true; }
@@ -179,7 +179,17 @@ const H={
   recset:el=>{ const t=today(); const r=(S.profile.rec[t]=S.profile.rec[t]||{}); const k=el.dataset.k,v=+el.dataset.v; r[k]=r[k]===v?undefined:v; if(r[k]===undefined) delete r[k]; const keys=Object.keys(S.profile.rec).sort(); while(keys.length>120) delete S.profile.rec[keys.shift()]; saveProfile(); render(); },
   cdset:el=>{ S.ui.cd[el.dataset.k]=el.dataset.v; render(); },
   cdadd:()=>{ const cd=S.ui.cd; const m=Math.round(+cd.min); const d=cd.date||today(); if(!(m>0)){ toast('Enter the minutes.'); return; } if(d>today()){ toast('That date is in the future.'); return; } S.profile.cardio.push({id:uid(),date:d,type:cd.type,min:m,effort:cd.effort}); S.ui.cd.min=''; saveProfile(); toast('Cardio added.'); render(); },
-  msadd:()=>{ const m=S.ui.ms; const d=m.d||today(); if(d>today()){ toast('That date is in the future.'); return; } const e={id:uid(),d}; let any=false; ['waist','chest','arm','thigh'].forEach(k=>{ const v=parseFloat(m[k]); if(v>0){ e[k]=v; any=true; } }); if(!any){ toast('Enter at least one measurement.'); return; } S.profile.meas.push(e); S.ui.ms={d:'',waist:'',chest:'',arm:'',thigh:''}; saveProfile(); toast('Saved.'); render(); },
+  msadd:()=>{ const m=S.ui.ms; const d=m.d||today(); if(d>today()){ toast('That date is in the future.'); return; } const e={id:uid(),d}; let any=false; MFIELDS2.forEach(f=>{ const v=parseFloat(m[f[0]]); if(v>0){ e[f[0]]=v; any=true; } }); if(!any){ toast('Enter at least one measurement.'); return; } S.profile.meas.push(e); S.ui.ms={d:''}; saveProfile(); toast('Measurements saved.'); render(); },
+  bodysave:()=>{ const w=parseFloat(($('#bw')||{}).value), bf=parseFloat(($('#bbf')||{}).value), m=($('#bm')||{}).value||'other', d=($('#bd')||{}).value||today();
+    if(d>today()){ toast('That date is in the future.'); return; } if(!(w>0)&&!(bf>0)){ toast('Enter a weight or a body fat %.'); return; }
+    if(bf>0&&(bf<3||bf>60)){ toast('Body fat % should be between 3 and 60.'); return; }
+    if(w>0){ const x=S.profile.weights.find(q=>q.d===d); if(x) x.kg=w; else S.profile.weights.push({d,kg:w}); }
+    if(bf>0){ S.profile.comp=(S.profile.comp||[]).filter(c=>c.d!==d); S.profile.comp.push({id:uid(),d,bf,m}); }
+    saveProfile(); toast('Saved.'); render(); },
+  tapeuse:el=>{ const bf=+el.dataset.v, d=el.dataset.d; S.profile.comp=(S.profile.comp||[]).filter(c=>c.d!==d); S.profile.comp.push({id:uid(),d,bf,m:'tape'}); saveProfile(); toast('Body fat saved from the tape estimate.'); render(); },
+  compdel:el=>{ S.profile.comp=(S.profile.comp||[]).filter(c=>c.id!==el.dataset.id); saveProfile(); render(); },
+  bodychart:el=>{ S.ui.bodyChart=el.dataset.v; render(); },
+  mchart:el=>{ S.ui.mChart=el.dataset.v; render(); },
   msdel:el=>{ S.profile.meas=S.profile.meas.filter(x=>x.id!==el.dataset.id); saveProfile(); render(); },
   editsess:el=>{ const s=S.sessions.find(x=>x.id===el.dataset.id); if(!s) return;
     if(S.active){ toast('Finish or discard your workout in progress first.'); return; }
@@ -228,6 +238,8 @@ const H={
   cancelrename:()=>{ S.ui.renaming=null; render(); },
   saveprogname:el=>{ const p=S.programs.find(x=>x.id===el.dataset.id); const v=(($('#pgname')||{}).value||'').trim(); if(p&&v){ p.name=v.slice(0,60); saveProgram(p); toast('Renamed.'); } S.ui.renaming=null; render(); },
   unitex:el=>{ const k=el.dataset.k; S.profile.unitEx=S.profile.unitEx||{}; if(el.dataset.v==='lb') S.profile.unitEx[k]='lb'; else delete S.profile.unitEx[k]; saveProfile(); render(); },
+  eqpick:el=>{ S.ui.eqPick=S.ui.eqPick===el.dataset.k?null:el.dataset.k; render(); },
+  eqset:el=>{ const k=el.dataset.k, v=el.dataset.v; S.profile.eqEx=S.profile.eqEx||{}; const auto=L.eqFor(k); if(v===auto) delete S.profile.eqEx[k]; else S.profile.eqEx[k]=v; S.ui.eqPick=null; saveProfile(); render(); },
   wnotiftoggle:()=>{ S.profile.wnotif=S.profile.wnotif===false; saveProfile(); render(); },
   awaketoggle:()=>{ S.profile.awake=!S.profile.awake; saveProfile(); render(); },
   backupnow:async()=>{ await autoBackup(true); const b=bkInfo(); toast(b.err?'Backup failed: '+b.err:'Backed up to '+b.file); render(); },

@@ -14,4 +14,5 @@ fs.writeFileSync(path.join(__dirname,'..','www','index.html'),out);
 const lib=path.join(__dirname,'..','www','lib'); fs.mkdirSync(lib,{recursive:true});
 const nm=path.join(__dirname,'..','node_modules');
 [['xlsx/dist/xlsx.mini.min.js','xlsx.js'],['pdfjs-dist/build/pdf.min.js','pdf.js'],['pdfjs-dist/build/pdf.worker.min.js','pdf.worker.js']].forEach(([a,b])=>fs.copyFileSync(path.join(nm,a),path.join(lib,b)));
+fs.copyFileSync(path.join(__dirname,'..','data','pct.js'),path.join(lib,'pct.js'));
 console.log('www/index.html',out.length,'bytes');

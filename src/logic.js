@@ -279,6 +279,32 @@ const TAGS=[['hpush','Chest','Press'],['incpush','Chest','Incline press'],['fly'
 const GROUP_OF={}; TAGS.forEach(t=>GROUP_OF[t[0]]=t[1]);
 const GROUPS=[...new Set(TAGS.map(t=>t[1]))];
 const COMPOUND_TAGS=new Set(['hpush','incpush','vpush','vpull','hpull','squat','hinge']);
+// Equipment from a name: exact match in the exercise list first, then words in the name.
+const EQ_NAMES={bb:'Barbell',db:'Dumbbell',mach:'Machine',cable:'Cable',kb:'Kettlebell',bw:'Bodyweight'};
+function eqFor(name){
+  const k=keyOf(name); const hit=DB.find(e=>keyOf(e.n)===k); if(hit) return hit.q;
+  const n=' '+String(name).toLowerCase()+' ';
+  if(/\b(db|dbs|dumbbells?)\b/.test(n)) return 'db';
+  if(/\b(kb|kettlebells?)\b/.test(n)) return 'kb';
+  if(/\b(smith|machine|leg press|hack squat|pec deck|leg curl|leg extension|seated calf|belt squat|pendulum|hammer strength|chest press|assisted)\b/.test(n)) return 'mach';
+  if(/\b(cable|pulldown|pushdown|press ?down|rope|face pull|crossover|pull ?through)\b/.test(n)) return 'cable';
+  if(/\b(bb|barbell|ez|trap bar|hex bar|landmine|safety bar|ssb|deadlift|squat|bench press|overhead press|ohp|clean|snatch|good morning|rdl|hip thrust|pendlay|t-bar)\b/.test(n)) return 'bb';
+  if(/\b(push ?ups?|pull ?ups?|chin ?ups?|dips?|plank|sit ?ups?|crunch|band|bodyweight|bw|leg raise|burpee|nordic|inverted row|hollow|dead bug|bird dog|pistol)\b/.test(n)) return 'bw';
+  return 'other';
+}
+function stepForEq(q){ return {bb:2.5,db:2,mach:5,cable:2.5,kb:4,bw:2.5}[q]||2.5; }
+// US Navy tape method (cm). Returns body fat % or null.
+function navyBF(sex,h,neck,waist,hips){ h=+h; neck=+neck; waist=+waist; hips=+hips; if(!(h>0&&neck>0&&waist>0)) return null;
+  let v; if(sex==='f'){ if(!(hips>0)||waist+hips-neck<=0) return null; v=495/(1.29579-0.35004*Math.log10(waist+hips-neck)+0.22100*Math.log10(h))-450; }
+  else { if(waist-neck<=0) return null; v=495/(1.0324-0.19077*Math.log10(waist-neck)+0.15456*Math.log10(h))-450; }
+  return v>2&&v<60?Math.round(v*10)/10:null; }
+// DOTS score (2019 coefficients).
+function dots(total,bw,sex){ total=+total; bw=+bw; if(!(total>0&&bw>0)) return null; const f=sex==='f';
+  const c=f?[-0.0000010706,0.0005158568,-0.1126655495,13.6175032,-57.96288]:[-0.000001093,0.0007391293,-0.1918759221,24.0900756,-307.75076];
+  const x=Math.min(f?150:210,Math.max(40,bw)); const den=c[0]*x**4+c[1]*x**3+c[2]*x**2+c[3]*x+c[4]; return Math.round(total*500/den*10)/10; }
+// Percentile of v given cut points [{p,v}] sorted by p.
+function pctOf(cuts,v){ if(!cuts||!cuts.length||!(v>0)) return null; if(v<cuts[0].v) return {p:cuts[0].p,lt:true}; const last=cuts[cuts.length-1]; if(v>=last.v) return {p:last.p,gt:true};
+  for(let i=1;i<cuts.length;i++){ const a=cuts[i-1],b=cuts[i]; if(v<b.v){ const t=b.v>a.v?(v-a.v)/(b.v-a.v):0; return {p:Math.round(a.p+t*(b.p-a.p))}; } } return {p:last.p}; }
 function setCustomEx(list){
   for(let i=DB.length-1;i>=0;i--) if(DB[i].cu) DB.splice(i,1);
   (list||[]).forEach(c=>{ if(!c||!c.n||!GROUP_OF[c.t]) return; if(DB.some(e=>keyOf(e.n)===keyOf(c.n))) return; DB.push(X(c.n,c.t,c.q||'bw',COMPOUND_TAGS.has(c.t)?1:0,{cu:1})); TAGMAP[keyOf(c.n)]=c.t; });
@@ -458,6 +484,6 @@ function warmup(keys,len,rot){
 }
 function rampFor(kg){ kg=+kg; if(!(kg>=40)) return null; const out=[]; [[0.5,5],[0.7,3],[0.85,1]].forEach(([p,r])=>{ const k=Math.max(20,roundTo(kg*p,2.5)); if(!out.length||out[out.length-1].kg!==k) out.push({kg:k,reps:r}); }); return out; }
 function stretchesFor(keys){ const out=[]; groupsFor(keys).forEach(g=>(STR[g]||[]).forEach(s=>{ if(!out.includes(s)) out.push(s); })); return out.slice(0,6); }
-return {TAGS,GROUP_OF,GROUPS,setCustomEx,exByGroup,replaceItem,rpePct,parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
+return {EQ_NAMES,eqFor,stepForEq,navyBF,dots,pctOf,TAGS,GROUP_OF,GROUPS,setCustomEx,exByGroup,replaceItem,rpePct,parseGrid,trend,tagFor,warmup,warmupAreas,rampFor,stretchesFor,recLevel,recStats,cardioWeeks,keyOf,prettify,parseLoad,parseCell,parseDSL,parseCSV,parseAny,normProgram,exFromPlain,e1rm,roundTo,stepFor,sugLoad,progress,ymd,parseYmd,addDays,mondayOf,weekCounts,streak,plateCount,buildHist,prsFor,sessionVolume,advance,GOALS,FOCUS,PLANS,DB,generate,swapItem,WAKE,nutrition,checkin,totalSec};
 })();
 /* LOGIC:END */

@@ -25,7 +25,10 @@ function exSugHTML(q){
   if(!exact) h+='<button type="button" class="exopt new" data-act="addnew">Add "'+esc(String(S.ui.addEx).trim())+'" as a new exercise</button>';
   return h;
 }
-function stepGuess(key){ return /(^| )(db|kb|dumbbell|kettlebell|curl|raise|flye|fly|lunge|step up|press down|pushdown)/.test(key)?1:2.5; }
+function eqOf(key,name){ return (S.profile.eqEx||{})[key]||L.eqFor(name||key); }
+function stepGuess(key,name){ return L.stepForEq(eqOf(key,name)); }
+function eqTag(key,name){ const q=eqOf(key,name); const open=S.ui.eqPick===key; return '<button type="button" class="eqtag" data-act="eqpick" data-k="'+esc(key)+'" aria-expanded="'+open+'" aria-label="Equipment: '+esc(L.EQ_NAMES[q]||'Not set')+'. Tap to change">'+esc(L.EQ_NAMES[q]||'Equipment?')+' <span aria-hidden="true">▾</span></button>'; }
+function eqChooser(key){ if(S.ui.eqPick!==key) return ''; const q=eqOf(key); return '<div class="chips eqchips" role="group" aria-label="Choose equipment">'+Object.keys(L.EQ_NAMES).map(k=>'<button type="button" class="chip" data-act="eqset" data-k="'+esc(key)+'" data-v="'+k+'" aria-pressed="'+(q===k)+'">'+L.EQ_NAMES[k]+'</button>').join('')+'</div>'; }
 function suggestFor(it,hist){
   if(it.timed) return null; const h=hist[it.key]; if(!h||!h.length) return null;
   const step=L.stepFor(it.eq||'bb'); const last=h[0];
@@ -203,10 +206,10 @@ function exCard(e,i,hist){
   const t=e.target; const h=(hist[e.key]||[])[0];
   const meta=[t.repsText?t.sets+' × '+t.repsText:t.sets+' sets',t.rpe?('RPE '+t.rpe):'',t.rest?('rest '+t.rest+'s'):''].filter(Boolean).join(' · ');
   let x='<div class="ex '+(e.ss?'ssb':'')+'" data-exi="'+i+'"><div class="row between"><button type="button" class="drag" data-drag="'+i+'" aria-label="Drag to reorder '+esc(e.name)+'" title="Drag to reorder"><svg viewBox="0 0 12 20" aria-hidden="true"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/><circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg></button><div class="grow">'+(e.ss?'<span class="ss">'+e.ss+'</span>':'')+'<span class="exn">'+esc(e.name)+'</span></div>'+(e.target&&e.target.timed?'':unitSw(e.key,e.name))+ask('rx'+e.id,'Remove','rmex',String(i))+'</div>';
-  x+='<div class="hint num">'+esc(meta)+'</div>'+(t.raw?'<div class="hint">Sheet: '+esc(t.raw)+'</div>':'')+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'');
+  x+='<div class="hint num">'+esc(meta)+(meta?' · ':'')+eqTag(e.key,e.name)+'</div>'+eqChooser(e.key)+(t.raw?'<div class="hint">Sheet: '+esc(t.raw)+'</div>':'')+(e.note?'<div class="hint">'+esc(e.note)+'</div>':'');
   if(h) x+='<div class="hint num">Last: '+h.sets.map(s=>dU(s.kg,e.key)+'×'+s.reps).join(', ')+' · '+fdate(h.date)+'</div>';
   if(e.sug) x+='<div class="hint b num">Try '+fw(e.sug.kg,e.key)+' × '+e.sug.reps+' <button class="btn sm ghost" data-act="usesug" data-i="'+i+'">Use</button></div><div class="hint">'+esc(e.sug.note)+'</div>';
-  x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">'+U(e.key)+' used</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
+  x+='<div class="sets"><span class="hdr">Set</span><span class="hdr">'+U(e.key)+(eqOf(e.key,e.name)==='db'?' each':' used')+'</span><span class="hdr">'+(t.timed?'Sec':'Reps')+'</span><span class="hdr">Done</span>';
   e.sets.forEach((s,j)=>{ x+=setRow(e,i,j); }); x+='</div>';
   x+='<div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="addset" data-i="'+i+'">+ Set</button><button class="btn sm ghost" data-act="rmset" data-i="'+i+'">− Set</button><span class="grow"></span><button class="btn sm ghost" data-act="exmove" data-i="'+i+'" data-v="-1" aria-label="Move '+esc(e.name)+' up"'+(i===0?' disabled':'')+'>↑</button><button class="btn sm ghost" data-act="exmove" data-i="'+i+'" data-v="1" aria-label="Move '+esc(e.name)+' down"'+(i===S.active.ex.length-1?' disabled':'')+'>↓</button></div></div>';
   return x;

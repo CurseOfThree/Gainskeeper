@@ -112,6 +112,22 @@ function rmCard(hist,rm){
     return '<div class="li rmrow"><div class="grow"><b>'+esc(nm)+'</b><div class="hint num">'+(est?'Est. '+fw0(est,k):'No estimate yet')+(prg?' · program '+fw(prg,k):'')+((S.profile.rm1[k]||{}).d?' · yours set '+fdate(S.profile.rm1[k].d):'')+'</div></div><input class="rmin num" inputmode="decimal" data-in="rm1" data-k="'+esc(k)+'" data-n="'+esc(nm)+'" aria-label="Your 1RM for '+esc(nm)+' in '+U(k)+'" placeholder="'+U(k)+'" value="'+esc(mine?dU(mine,k):'')+'"></div>'; }).join('');
   return h+'<p class="tiny muted" style="margin-top:8px">Leave a box empty to use the program\'s block 1RM or, failing that, your estimate.</p></div>';
 }
+let PCT_LOADING=false;
+function ageGroup(a){ a=+a; if(!(a>0)) return 'open'; return a<=18?'sub-junior':a<=23?'junior':a<=39?'open':a<=49?'masters 1':a<=59?'masters 2':a<=69?'masters 3':'masters 4'; }
+function standingCard(hist){
+  const f=S.profile.fuel, sx=f.sex==='f'?'F':'M'; const bw=typeof avgW==='function'?avgW():null;
+  const lifts=[['back squat','Squat','s'],['bench press','Bench','b'],['deadlift','Deadlift','d']].map(x=>{ const mine=myRM(x[0]); const est=estRM(x[0],hist); return {k:x[0],n:x[1],c:x[2],v:mine||est,src:mine?'yours':est?'est':null}; });
+  let h='<div class="card"><h3>Where you would stand</h3>';
+  if(!bw||lifts.every(l=>!l.v)) return h+'<p class="small muted" style="margin-top:6px">Log a weigh-in on Fuel and some squat, bench or deadlift sets (or enter your 1RMs above) to see how you compare with competitive lifters.</p></div>';
+  const P=window.GK_PCT; if(!P){ if(!PCT_LOADING){ PCT_LOADING=true; loadLib('pct').then(()=>render()).catch(()=>{}); } return h+'<p class="small muted" style="margin-top:6px">Loading the comparison data…</p></div>'; }
+  const wc=P.wc[sx].find(w=>bw<=w); const wcName=wc>=999?P.wc[sx][P.wc[sx].length-2]+'+ kg':wc+' kg';
+  let ag=ageGroup(f.age); let row=P.t[sx+'|'+wc+'|'+ag]; if(!row){ ag='open'; row=P.t[sx+'|'+wc+'|open']; } if(!row) return h+'<p class="small muted">No comparison data for that class.</p></div>';
+  const cuts=c=>P.p.map((p,i)=>({p,v:row[c][i]})); const fmtP=r=>!r?'-':r.lt?'under '+r.p:r.gt?'over '+r.p:String(r.p);
+  const total=lifts.every(l=>l.v)?lifts.reduce((a,l)=>a+l.v,0):null; const tp=total?L.pctOf(cuts('t'),total):null; const ds=total?L.dots(total,bw,f.sex):null;
+  if(total) h+='<p style="margin:6px 0 2px">Your total of <b class="num">'+Math.round(total)+' kg</b> would beat about <b class="num">'+fmtP(tp)+'%</b> of raw lifters in the <b>'+wcName+'</b> class, '+esc(ag)+' ('+row.n.toLocaleString('en-AU')+' lifters).</p><p class="small muted num" style="margin:0 0 6px">DOTS score '+ds+'</p>';
+  h+='<div class="kv">'+lifts.map(l=>'<div><b class="num">'+(l.v?fmtP(L.pctOf(cuts(l.c),l.v)):'-')+'</b><span>'+l.n+(l.v?' '+Math.round(l.v)+' kg'+(l.src==='est'?' est.':''):'')+'</span></div>').join('')+'</div>';
+  return h+'<p class="tiny muted" style="margin-top:8px">Percentiles of best meet results from OpenPowerlifting (public domain, data to '+P.date.slice(0,7)+'), raw full-power meets. Your numbers use your entered 1RMs, or estimates from logged sets. Meet lifts have strict depth and judging, so gym numbers usually read a little high. For fun, not a prediction.</p></div>';
+}
 function bestsCard(hist){
   const keys=Object.keys(hist).filter(k=>hist[k].some(x=>x.e1>0)).sort((a,b)=>hist[b].length-hist[a].length).slice(0,8); if(!keys.length) return '';
   return '<div class="card"><h3>Personal bests</h3><p class="tiny muted" style="margin:2px 0 6px">Your most-trained lifts. Est. 1RM uses the Epley formula.</p>'+keys.map(k=>{ const h=hist[k]; const b=h.reduce((m,x)=>x.e1>m.e1?x:m,h[0]); const hv=h.reduce((m,x)=>x.topKg>m.topKg?x:m,h[0]);
@@ -121,25 +137,23 @@ function viewProgress(){
   if(S.ui.sess) return viewSession(); if(S.ui.histAll) return viewHistory();
   const hist=L.buildHist(S.sessions); const keys=Object.keys(hist).sort((a,b)=>hist[b].length-hist[a].length);
   const now=new Date(); const wc=L.weekCounts(S.sessions,now,12); const cut=L.ymd(L.addDays(now,-30)); const recent=S.sessions.filter(s=>s.date>=cut);
-  let h='';
+  const prog=activeProg(); const rmw=prog&&prog.weeks[Math.min(S.profile.ptr.w,prog.weeks.length-1)]; const rm=(rmw&&rmw.rm)||{};
+  let h=rmCard(hist,rm)+standingCard(hist), tail='';
   if(S.sessions.length){ const pm={}; const rs=sortedSessions().slice(0,5); rs.forEach(s=>{ pm[s.id]=L.prsFor(s,S.sessions); });
     h+='<div class="card"><h3>Session history</h3>'+rs.map(s=>sessRow(s,pm[s.id])).join('')+'<button class="btn sm" style="margin-top:10px" data-act="histall">See all '+S.sessions.length+' sessions</button></div>'; h+=bestsCard(hist); }
-  h+='<div class="card"><h3>Consistency</h3>'+bars(wc,S.profile.target)+'<p class="tiny muted">Dashed line is your weekly target. Green weeks counted toward your streak.</p></div>';
-  h+='<div class="card"><div class="kv"><div><b class="num">'+S.sessions.length+'</b><span>sessions</span></div><div><b class="num">'+recent.length+'</b><span>last 30 days</span></div><div><b class="num">'+Math.round(recent.reduce((a,s)=>a+L.sessionVolume(s),0)/1000*10)/10+'</b><span>tonnes, 30 days</span></div></div></div>';
+  tail+='<div class="card"><h3>Consistency</h3>'+bars(wc,S.profile.target)+'<p class="tiny muted">Dashed line is your weekly target. Green weeks counted toward your streak.</p></div>';
+  tail+='<div class="card"><div class="kv"><div><b class="num">'+S.sessions.length+'</b><span>sessions</span></div><div><b class="num">'+recent.length+'</b><span>last 30 days</span></div><div><b class="num">'+Math.round(recent.reduce((a,s)=>a+L.sessionVolume(s),0)/1000*10)/10+'</b><span>tonnes, 30 days</span></div></div></div>';
   const rs=L.recStats(S.profile.rec||{},new Date(),7);
-  h+='<div class="card"><h3>Recovery</h3>'+(rs.seen?'<div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.sleep?rs.sleep.toFixed(1):'-')+'</b><span>avg sleep hrs, 7 days</span></div><div><b class="num">'+(rs.feel?rs.feel.toFixed(1):'-')+'</b><span>avg feel (1 to 5)</span></div><div><b class="num">'+rs.low+'</b><span>low days of '+rs.seen+'</span></div></div><div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.mood?rs.mood.toFixed(1):'-')+'</b><span>avg mood</span></div><div><b class="num">'+(rs.sore?rs.sore.toFixed(1):'-')+'</b><span>avg soreness</span></div><div><b class="num">'+(rs.str?rs.str.toFixed(1):'-')+'</b><span>avg strength</span></div></div>':'<p class="small muted" style="margin-top:6px">Answer the check-in on Train to start building this picture.</p>')+'</div>';
-  h+='<div class="card"><h3>Cardio, weekly</h3>'+bars(L.cardioWeeks(S.profile.cardio,now,12),150)+'<p class="tiny muted">Moderate minutes, hard minutes counted double. Dashed line is 150.</p></div>';
-  h+=measCard();
-  const prog=activeProg(); const rmw=prog&&prog.weeks[Math.min(S.profile.ptr.w,prog.weeks.length-1)]; const rm=(rmw&&rmw.rm)||{};
-  h+=rmCard(hist,rm);
-  if(!keys.length){ h+='<div class="card"><p class="muted">Log a session and your lifts show up here, with a chart for each.</p></div>'; return h; }
+  tail+='<div class="card"><h3>Recovery</h3>'+(rs.seen?'<div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.sleep?rs.sleep.toFixed(1):'-')+'</b><span>avg sleep hrs, 7 days</span></div><div><b class="num">'+(rs.feel?rs.feel.toFixed(1):'-')+'</b><span>avg feel (1 to 5)</span></div><div><b class="num">'+rs.low+'</b><span>low days of '+rs.seen+'</span></div></div><div class="kv" style="margin-top:8px"><div><b class="num">'+(rs.mood?rs.mood.toFixed(1):'-')+'</b><span>avg mood</span></div><div><b class="num">'+(rs.sore?rs.sore.toFixed(1):'-')+'</b><span>avg soreness</span></div><div><b class="num">'+(rs.str?rs.str.toFixed(1):'-')+'</b><span>avg strength</span></div></div>':'<p class="small muted" style="margin-top:6px">Answer the check-in on Train to start building this picture.</p>')+'</div>';
+  tail+='<div class="card"><h3>Cardio, weekly</h3>'+bars(L.cardioWeeks(S.profile.cardio,now,12),150)+'<p class="tiny muted">Moderate minutes, hard minutes counted double. Dashed line is 150.</p></div>';
+  if(!keys.length){ h+='<div class="card"><p class="muted">Log a session and your lifts show up here, with a chart for each.</p></div>'; return h+tail; }
   const key=(S.ui.progKey&&hist[S.ui.progKey])?S.ui.progKey:keys[0]; const x=[...hist[key]].sort((a,b)=>a.date<b.date?-1:1);
   const pts=x.map(y=>({x:L.parseYmd(y.date).getTime(),y:Math.round(toU(y.e1,key)*10)/10})); const best=Math.max(...x.map(y=>y.e1)); const first=x[0].e1;
   h+='<div class="card"><label class="lbl" for="pk">Exercise</label><select id="pk" data-in="progkey">'+keys.map(k=>'<option value="'+esc(k)+'"'+(k===key?' selected':'')+'>'+esc(hist[k][0].name)+' ('+hist[k].length+')</option>').join('')+'</select><div class="row" style="margin-top:8px;gap:8px"><span class="tiny muted">Show in</span>'+unitSw(key,hist[key][0].name)+'</div>';
   h+='<div style="margin-top:12px">'+chart(pts,{best:true,label:'Estimated one rep max over time'})+'</div><p class="tiny muted">Estimated one rep max, from weight × (1 + reps ÷ 30). It is a guide, and is less reliable above about 10 reps.</p>';
   h+='<div class="kv" style="margin-top:10px"><div><b class="num">'+Math.round(toU(best,key))+'</b><span>best est. 1RM ('+U(key)+')</span></div><div><b class="num">'+dU(Math.max(...x.map(y=>y.topKg)),key)+'</b><span>heaviest '+U(key)+'</span></div><div><b class="num">'+(x.length>1?(best>=first?'+':'')+Math.round((best-first)/first*100)+'%':'-')+'</b><span>since first</span></div></div>';
   h+=[...x].reverse().slice(0,8).map(y=>'<div class="li"><span>'+fdate(y.date)+'</span><span class="num small">'+y.sets.map(s=>dU(s.kg,key)+'×'+s.reps).join(', ')+'</span></div>').join('')+'</div>';
-  return h;
+  return h+tail;
 }
 
 const MFIELDS=[['waist','Waist'],['chest','Chest'],['arm','Arm'],['thigh','Thigh']];
@@ -154,7 +168,7 @@ function measCard(){
 /* ---------- first-run setup ---------- */
 function viewSetup(){
   const p=S.profile; const dn=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; const eqn=[['bb','Barbell'],['db','Dumbbells'],['mach','Machines'],['cable','Cables'],['kb','Kettlebells']];
-  let h='<div style="padding:12px 0 24px"><div class="brand" style="margin:8px 0 4px"><div><h1 style="margin:0">Gainskeeper</h1><small>Strength and shape, kept.</small></div></div><div class="knurl" style="margin:12px 0"></div>';
+  let h='<div style="padding:12px 0 24px"><div class="brand" style="margin:8px 0 4px"><div><h1 style="margin:0">Gainskeeper</h1></div></div>'+quoteHTML()+'<div class="knurl" style="margin:12px 0"></div>';
   h+='<div class="card"><h2>Set up</h2><p class="small muted" style="margin:4px 0 10px">Everything stays on this phone. You can change any of this later in Plan, Settings.</p>';
   h+='<label class="lbl" for="sname">What should I call you?</label><input id="sname" data-in="setname" type="text" autocomplete="off" maxlength="30" value="'+esc(p.name||'')+'" placeholder="Name">';
   h+='<span class="lbl" style="margin-top:14px">Used for calorie and protein estimates</span><div class="chips">'+[['m','Male'],['f','Female']].map(x=>'<button class="chip" data-act="fsex" data-v="'+x[0]+'" aria-pressed="'+(p.fuel.sex===x[0])+'">'+x[1]+'</button>').join('')+'</div>';

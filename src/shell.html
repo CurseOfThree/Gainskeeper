@@ -56,6 +56,12 @@ body.resting .nextbar{bottom:calc(132px + env(safe-area-inset-bottom,0px))}
 .step span{min-width:64px;text-align:center;display:flex;flex-direction:column;line-height:1.05}.step span b{font-size:18px}.step small{font-size:11px;color:var(--muted)}
 .nb-done{flex:1 1 110px;min-height:46px}
 @media (max-width:380px){.step span{min-width:52px}.step button{width:38px}}
+.eqtag{background:none;border:0;padding:2px 0;margin:0;color:var(--blue);font:inherit;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.eqchips{margin:6px 0 4px}
+.quote{margin:6px 0 10px;font-size:13.5px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+.quote span{font-style:italic;color:var(--ink)}
+.quote cite{font-style:normal;font-size:12px;white-space:nowrap}
+.quote cite::before{content:"\2014\00a0"}
 .card.hasx{position:relative}
 .card.hasx>.chead{padding-right:40px}
 .cxb{position:absolute;top:6px;right:6px;width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}

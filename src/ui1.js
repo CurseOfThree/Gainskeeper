@@ -6,6 +6,9 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const today=()=>L.ymd(new Date());
 const fk=n=>n==null||n===''||isNaN(n)?'':String(Math.round(n*100)/100);
+const QUOTES=[["Strong people are harder to kill than weak people, and more useful in general.", "Mark Rippetoe, strength coach"], ["Everybody wanna be a bodybuilder, but don't nobody wanna lift no heavy-ass weights.", "Ronnie Coleman, 8× Mr. Olympia"], ["Stimulate, don't annihilate.", "Lee Haney, 8× Mr. Olympia"], ["Everything works, for about six weeks.", "Dan John, strength coach and thrower"], ["The mind is the limit. As long as the mind can envision the fact that you can do something, you can do it.", "Arnold Schwarzenegger, Pumping Iron"], ["Light weight, baby!", "Ronnie Coleman"], ["The goal is to keep the goal the goal.", "Dan John"], ["Two hundred pounds is always two hundred pounds.", "Henry Rollins, Iron and the Soul"], ["If it's important, do it every day. If it's not important, don't do it at all.", "Dan Gable, Olympic wrestling champion"], ["Start too light.", "Jim Wendler, author of 5/3/1"], ["The last three or four reps is what makes the muscle grow.", "Arnold Schwarzenegger, Pumping Iron"], ["Ain't nothin' but a peanut.", "Ronnie Coleman"], ["Gold medals aren't really made of gold. They're made of sweat, determination, and a hard-to-find alloy called guts.", "Dan Gable"], ["The Iron never lies to you.", "Henry Rollins, Iron and the Soul"], ["The muscle and the mind must become one. One without the other is zero.", "Lee Haney"], ["Physical strength is the most important thing in life.", "Mark Rippetoe, Starting Strength"]];
+function quoteToday(){ const d=Math.floor((Date.now()-new Date().getTimezoneOffset()*6e4)/864e5); return QUOTES[d%QUOTES.length]; }
+function quoteHTML(){ const q=quoteToday(); return '<p class="quote"><span>“'+esc(q[0])+'”</span> <cite>'+esc(q[1])+'</cite></p>'; }
 const LB=2.20462;
 const U=key=>(key&&(S.profile.unitEx||{})[key]==='lb')?'lb':'kg';
 const toU=(kg,key)=>U(key)==='lb'?(+kg)*LB:+kg;
@@ -18,7 +21,7 @@ function fromU(v,key){ if(v===''||v==null) return ''; const n=parseFloat(String(
 function roundU(kg,step,key){ if(U(key)!=='lb'||!(kg>0)) return kg; const ls=(step||2.5)>=2.5?5:2.5; return Math.round(Math.round(kg*LB/ls)*ls/LB*1000)/1000; }
 const fdate=s=>{ try{ return L.parseYmd(s).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}); }catch(e){ return s; } };
 const clone=o=>JSON.parse(JSON.stringify(o));
-const DEF_PROFILE=()=>({v:1,name:'',setup:false,unitEx:{},customEx:[],rm1:{},target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
+const DEF_PROFILE=()=>({v:1,name:'',setup:false,unitEx:{},eqEx:{},comp:[],customEx:[],rm1:{},target:4,days:[0,2,4,5],eq:{bb:true,db:true,mach:true,cable:true,kb:true},activePid:null,ptr:{w:6,d:0,done:false},fuel:{sex:'m',age:'',h:'',act:1.55,goal:'recomp',rate:0.5,meals:4,fat:0.8,bf:'',lean:''},weights:[],foodOn:false,food:{},libRead:{},libNotes:{},customLib:[],prog:true,rest:true,rec:{},cardio:[],meas:[],wu:'std',wuOn:true});
 const S={tab:'train',profile:DEF_PROFILE(),programs:[],sessions:[],active:null,status:'local',cap:{sample:null,downloads:null,images:false},rest:null,
   ui:{planTab:'program',lib:'all',rz:{goal:'size',focus:'full',time:30,seed:1,plan:null,wake:false},bw:null,bd:0,bpid:null,confirm:null,imp:{text:'',res:null,busy:false,err:'',images:[]},inWorkout:false,summary:null,fuelDay:today(),libAdd:false,progKey:null,msg:'',addEx:'',wuOpen:true,cd:{type:'Walk',effort:'easy',min:'',date:''},ms:{d:'',waist:'',chest:'',arm:'',thigh:''}}};
 const LS_KEY='ironlog.v1',LS_ACTIVE='ironlog.active',LS_UI='ironlog.ui',LS_COLL='gainskeeper.collapsed';
@@ -48,6 +51,9 @@ function loadLocal(){
   const d=lsGet(LS_KEY); if(d){ S.profile=Object.assign(DEF_PROFILE(),d.profile||{}); S.profile.fuel=Object.assign(DEF_PROFILE().fuel,(d.profile||{}).fuel||{}); S.programs=d.programs||[]; S.sessions=d.sessions||[]; if((d.profile||{}).setup===undefined&&(S.programs.length||S.sessions.length)) S.profile.setup=true; }
   const a=lsGet(LS_ACTIVE); if(a&&a.ex) S.active=a;
   ensureSeed();
+  { const f=S.profile.fuel||{}; S.profile.comp=S.profile.comp||[]; const ws=[...(S.profile.weights||[])].sort((a,b)=>a.d<b.d?-1:1); const lw=ws.length?ws[ws.length-1].kg:null;
+    if(!S.profile.comp.length){ let bf=+f.bf>0?+f.bf:(+f.lean>0&&lw?Math.round((1-f.lean/lw)*1000)/10:null); if(bf>2&&bf<60) S.profile.comp.push({id:'mig',d:ws.length?ws[ws.length-1].d:today(),bf,m:'other'}); }
+    f.bf=''; f.lean=''; }
   L.setCustomEx(S.profile.customEx);
 }
 async function connect(){
